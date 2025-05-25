@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 try:
     from agents import Agent, OpenAIChatCompletionsModel, Runner
     from openai import AsyncOpenAI, AsyncAzureOpenAI
+    from openai.types.responses import ResponseFunctionToolCall
 except ImportError:
     raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
 
@@ -284,26 +285,30 @@ async def run_interactive_chat(triage_agent):
                         streamed_output += event.data.delta
                 elif event.type == "agent_updated_stream_event":
                     last_agent = event.new_agent
-                    print(f"\nAgent updated: {last_agent.name}", flush=True)
+                    print(f"  Agent updated: {last_agent.name}", flush=True)
                 elif event.type == "run_item_stream_event":
                     from agents import ItemHelpers
                     if event.item.type == "tool_call_item":
-                        print("\n-- Tool was called", flush=True)
+                        if hasattr(event.item, "raw_item") and isinstance(event.item.raw_item, ResponseFunctionToolCall):
+                            tool_call = event.item.raw_item
+                            print(f"  Tool call: {tool_call.name}{tool_call.arguments}", flush=True)
+                        else:
+                            print("  Tool was called", flush=True)
                     elif event.item.type == "tool_call_output_item":
-                        print(f"\n-- Tool output: {event.item.output}", flush=True)
+                        print(f"  Tool output: {event.item.output}", flush=True)
                     elif event.item.type == "message_output_item":
                         text = ItemHelpers.text_message_output(event.item)
-                        print(f"\n-- Message output:\n{text}", flush=True)
                         # If no token output has been printed, use this complete text as final output.
                         if not streamed_output:
                             streamed_output = text
 
             print()  # Newline after streaming output
 
-            if streamed_output:
-                print(f"\nFinal response: {streamed_output}")
-            if last_agent:
-                print(f"Agent responsible: {last_agent.name}")
+            #if streamed_output:
+            #    if last_agent:
+            #        print(f"\n{last_agent.name}: {streamed_output}")
+            #    else:
+            #        print(f"\nFinal response: {streamed_output}")
 
             # Update chat history with the streamed response
             chat_history = chat_history + [{"role": "assistant", "content": streamed_output}]
