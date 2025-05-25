@@ -16,7 +16,11 @@ from .function_tools import (
     search_wikipedia,
     fetch_wikipedia_content,
     search_web_serper,
-    fetch_http_url_content
+    fetch_http_url_content,
+    check_directory_exists,
+    check_file_exists,
+    get_current_working_directory,
+    create_png_from_pixels
 )
 
 __all__ = [
@@ -30,5 +34,9 @@ __all__ = [
     'search_wikipedia',
     'fetch_wikipedia_content',
     'search_web_serper',
-    'fetch_http_url_content'
+    'fetch_http_url_content',
+    'check_directory_exists',
+    'check_file_exists',
+    'get_current_working_directory',
+    'create_png_from_pixels'
 ]

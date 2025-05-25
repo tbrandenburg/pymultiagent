@@ -6,3 +6,4 @@ ipykernel
 openpyxl
 dotenv
 requests
+pillow

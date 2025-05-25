@@ -8,7 +8,7 @@ import os
 import requests
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import quote
 
 try:
@@ -534,3 +534,79 @@ def search_wikipedia(query: str, limit: int = 5) -> List[Dict[str, str]]:
         
     except requests.RequestException as e:
         raise requests.RequestException(f"Wikipedia search failed: {str(e)}")
+
+@function_tool
+def check_directory_exists(path: str) -> bool:
+    """
+    Checks if a directory exists at the specified path.
+
+    Args:
+        path (str): The directory path to check.
+
+    Returns:
+        bool: True if the directory exists, False otherwise.
+    """
+    from pathlib import Path
+    directory = Path(path)
+    return directory.exists() and directory.is_dir()
+
+@function_tool
+def check_file_exists(file_path: str) -> bool:
+    """
+    Checks if a file exists at the specified path.
+
+    Args:
+        file_path (str): The file path to check.
+
+    Returns:
+        bool: True if the file exists, False otherwise.
+    """
+    from pathlib import Path
+    file = Path(file_path)
+    return file.exists() and file.is_file()
+
+@function_tool
+def get_current_working_directory() -> str:
+    """
+    Returns the current working directory.
+
+    Returns:
+        str: The absolute path of the current working directory.
+    """
+    import os
+    return os.getcwd()
+
+@function_tool
+def create_png_from_pixels(file_path: str, width: int, height: int, pixel_array: List[List[int]]) -> None:
+    """
+    Creates a PNG image from a colored pixel array.
+
+    Args:
+        file_path (str): The file path where the PNG will be saved.
+        width (int): The width of the image.
+        height (int): The height of the image.
+        pixel_array (List[List[int]]): A list of [R, G, B] pixel values.
+                                       The length must be equal to width * height.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If the length of pixel_array does not equal width * height.
+        ImportError: If Pillow is not installed.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        raise ImportError("Pillow is required to create PNGs. Install it with 'pip install pillow'.")
+    
+    if len(pixel_array) != width * height:
+        raise ValueError("Pixel array length must equal width * height.")
+    
+    # Create a new RGB image with the specified dimensions
+    image = Image.new("RGB", (width, height))
+    # Convert each inner list to a tuple
+    image.putdata([tuple(pixel) for pixel in pixel_array])
+    
+    # Save the image in PNG format
+    image.save(file_path, "PNG")

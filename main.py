@@ -18,11 +18,11 @@ except ImportError:
 
 # Import tools and tests from separate modules
 try:
-    from .tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content
+    from .tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, create_png_from_pixels
     from .tests import run_test_cases, format_separator_line
 except ImportError:
     # If relative imports fail, try absolute imports for direct execution
-    from tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content
+    from tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, create_png_from_pixels
     from tests import run_test_cases, format_separator_line
 
 # Load environment variables
@@ -188,7 +188,7 @@ Examples:
 
     parser.add_argument(
         "--model",
-        default="o4-mini",
+        default="gpt-4o-mini",
         help="Model to use (default: %(default)s). Available models depend on backend."
     )
     
@@ -301,7 +301,7 @@ async def run_interactive_chat(triage_agent, max_turns):
                     if event.item.type == "tool_call_item":
                         if hasattr(event.item, "raw_item") and isinstance(event.item.raw_item, ResponseFunctionToolCall):
                             tool_call = event.item.raw_item
-                            print(f"  Tool call: {tool_call.name}{tool_call.arguments}", flush=True)
+                            print(f"  Tool call: {tool_call.name}{tool_call.arguments[:100]}...", flush=True)
                         else:
                             print("  Tool was called", flush=True)
                     elif event.item.type == "tool_call_output_item":
@@ -379,7 +379,7 @@ async def main():
             instructions="prompts/coder_prompt.txt",
             backend=backend,
             model_name=model_name,
-            tools=[read_file, read_file_lines, write_file, execute_shell_command]
+            tools=[read_file, read_file_lines, write_file, check_directory_exists, check_file_exists, get_current_working_directory, execute_shell_command, create_png_from_pixels]
         )
 
         knowledge_assistant = create_custom_agent(
