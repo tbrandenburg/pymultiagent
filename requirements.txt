@@ -1,0 +1,8 @@
+gradio
+tqdm
+openai
+openai-agents
+ipykernel
+openpyxl
+dotenv
+requests
