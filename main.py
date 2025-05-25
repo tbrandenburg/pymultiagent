@@ -234,7 +234,7 @@ def process_chat_history(chat_history, new_response):
 
 async def run_interactive_chat(triage_agent):
     """
-    Run an interactive chat session with the user.
+    Run an interactive chat session with the user, streaming responses.
 
     Args:
         triage_agent: The initialized triage agent
@@ -266,26 +266,50 @@ async def run_interactive_chat(triage_agent):
         # Add user input to chat history
         chat_history = chat_history + [{"role": "user", "content": prompt}]
 
-        # Display a "thinking" message
-        print("Processing your request...")
+        print("Processing your request (streaming)...")
 
         try:
-            # Run the request through the agent system
-            response = await Runner.run(
+            # Stream the response from the agent system
+            streamed_output = ""
+            last_agent = None
+            stream = Runner.run_streamed(
                 triage_agent,
                 input=chat_history,
             )
+            async for event in stream.stream_events():
+                if event.type == "raw_response_event":
+                    from openai.types.responses import ResponseTextDeltaEvent
+                    if isinstance(event.data, ResponseTextDeltaEvent):
+                        print(event.data.delta, end="", flush=True)
+                        streamed_output += event.data.delta
+                elif event.type == "agent_updated_stream_event":
+                    last_agent = event.new_agent
+                    print(f"\nAgent updated: {last_agent.name}", flush=True)
+                elif event.type == "run_item_stream_event":
+                    from agents import ItemHelpers
+                    if event.item.type == "tool_call_item":
+                        print("\n-- Tool was called", flush=True)
+                    elif event.item.type == "tool_call_output_item":
+                        print(f"\n-- Tool output: {event.item.output}", flush=True)
+                    elif event.item.type == "message_output_item":
+                        text = ItemHelpers.text_message_output(event.item)
+                        print(f"\n-- Message output:\n{text}", flush=True)
+                        # If no token output has been printed, use this complete text as final output.
+                        if not streamed_output:
+                            streamed_output = text
 
-            # Display the response
-            print(f"\nFinal response: {response.final_output}")
-            print(f"Agent responsible: {response.last_agent.name}")
+            print()  # Newline after streaming output
 
-            # Update chat history with the response
-            chat_history = process_chat_history(chat_history, response)
+            if streamed_output:
+                print(f"\nFinal response: {streamed_output}")
+            if last_agent:
+                print(f"Agent responsible: {last_agent.name}")
+
+            # Update chat history with the streamed response
+            chat_history = chat_history + [{"role": "assistant", "content": streamed_output}]
         except Exception as e:
             print(f"\nError processing request: {e}")
             print("Your message was not added to the chat history.")
-            # Remove the last message since it wasn't processed
             if chat_history:
                 chat_history.pop()
 
