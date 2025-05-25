@@ -343,11 +343,7 @@ async def main():
 
         code_assistant = create_custom_agent(
             name="Coder Assistant",
-            instructions=(
-                "You are a helpful coding assistant. You are an expertised programmer in all major programming languages. "
-                "You take care of understandable, efficient, robust and defensive code. "
-                "After coding you explain the code briefly."
-            ),
+            instructions="prompts/coder_prompt.txt",
             backend=backend,
             model_name=model_name,
             tools=[read_file, read_file_lines, write_file, execute_shell_command]
