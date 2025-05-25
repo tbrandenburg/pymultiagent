@@ -128,7 +128,7 @@ def create_custom_agent(name, instructions, backend="azure", model_name="o4-mini
 
     Args:
         name (str): The name of the agent
-        instructions (str): The instructions for the agent
+        instructions (str): The instructions for the agent, or a file path to a text file containing the agent prompt
         backend (str): The backend to use (azure, llama)
         model_name (str): The model name to use for this agent
         tools (list, optional): List of tools available to the agent
@@ -137,6 +137,10 @@ def create_custom_agent(name, instructions, backend="azure", model_name="o4-mini
     Returns:
         Agent: Configured custom agent
     """
+    import os
+    if os.path.isfile(instructions):
+        with open(instructions, "r") as f:
+            instructions = f.read()
     model = get_chat_model(backend=backend, model_name=model_name)
     kwargs = {"name": name, "instructions": instructions, "model": model}
     if tools:
