@@ -170,7 +170,7 @@ Available backends and models:
 
 Examples:
   %(prog)s                                    # Use default settings
-  %(prog)s --backend azure --model gpt-4o
+  %(prog)s --backend azure --model gpt-4o --max_turns 20
   %(prog)s --backend llama --model llama3.3 --tests
   %(prog)s --tests --no-interactive
         """
@@ -188,8 +188,15 @@ Examples:
 
     parser.add_argument(
         "--model",
-        default="gpt-4o-mini",
+        default="o4-mini",
         help="Model to use (default: %(default)s). Available models depend on backend."
+    )
+    
+    parser.add_argument(
+        "--max_turns",
+        type=int,
+        default=15,
+        help="Maximum number of turns for agent interaction (default: %(default)s)"
     )
 
     parser.add_argument(
@@ -210,6 +217,7 @@ Examples:
     config = {
         "backend": args.backend,
         "model": args.model,
+        "max_turns": args.max_turns,
         "interactive": not args.no_interactive,
         "run_tests": args.tests
     }
@@ -233,12 +241,13 @@ def process_chat_history(chat_history, new_response):
 
 # --- Interactive Chat ---
 
-async def run_interactive_chat(triage_agent):
+async def run_interactive_chat(triage_agent, max_turns):
     """
     Run an interactive chat session with the user, streaming responses.
 
     Args:
         triage_agent: The initialized triage agent
+        max_turns (int): Maximum turns allowed for each agent run
     """
     print("--- Interactive Chat Mode ---")
     print("Type 'exit' to end the conversation")
@@ -270,12 +279,13 @@ async def run_interactive_chat(triage_agent):
         print("Processing your request (streaming)...")
 
         try:
-            # Stream the response from the agent system
+            # Stream the response from the agent system with max_turns limit
             streamed_output = ""
             last_agent = None
             stream = Runner.run_streamed(
                 triage_agent,
                 input=chat_history,
+                max_turns=max_turns  # new parameter added
             )
             async for event in stream.stream_events():
                 if event.type == "raw_response_event":
@@ -303,12 +313,6 @@ async def run_interactive_chat(triage_agent):
                             streamed_output = text
 
             print()  # Newline after streaming output
-
-            #if streamed_output:
-            #    if last_agent:
-            #        print(f"\n{last_agent.name}: {streamed_output}")
-            #    else:
-            #        print(f"\nFinal response: {streamed_output}")
 
             # Update chat history with the streamed response
             chat_history = chat_history + [{"role": "assistant", "content": streamed_output}]
@@ -441,9 +445,9 @@ async def main():
         if args["run_tests"]:
             await run_test_cases(triage_agent)
 
-        # Run interactive chat if requested
+        # Run interactive chat if requested, passing max_turns
         if args["interactive"]:
-            await run_interactive_chat(triage_agent)
+            await run_interactive_chat(triage_agent, max_turns=args["max_turns"])
 
     except Exception as e:
         print(f"Error: {e}")

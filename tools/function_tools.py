@@ -93,17 +93,28 @@ def execute_shell_command(cd: str, command: str) -> str:
     Executes a shell command in a specified directory.
 
     Args:
-        cd (str): The directory path where the command should be executed
-        command (str): The shell command to execute
+        cd (str): The directory path where the command should be executed.
+                  This can be an absolute or relative path.
+        command (str): The shell command to execute.
 
     Returns:
-        str: The stdout output from the command execution
+        str: The stdout output from the command execution.
 
     Raises:
-        RuntimeError: If the command fails (non-zero exit code)
-        FileNotFoundError: If the specified directory does not exist
+        RuntimeError: If the command fails (non-zero exit code).
+        FileNotFoundError: If the specified directory does not exist.
     """
+    import os
     from subprocess import Popen, PIPE
+
+    # Resolve relative paths against the current working directory
+    if not os.path.isabs(cd):
+        cd = os.path.abspath(cd)
+    
+    # Check if directory exists
+    if not os.path.isdir(cd):
+        raise FileNotFoundError(f"Directory {cd} does not exist.")
+    
     process = Popen(command, cwd=cd, shell=True, stdout=PIPE, stderr=PIPE)
     stdout, stderr = process.communicate()
     if process.returncode != 0:
