@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from urllib.parse import quote
+import re
 
 try:
     from agents import function_tool
@@ -88,14 +89,18 @@ def read_file_lines(file_path: Path, start_line: Optional[int] = None, end_line:
 
 
 @function_tool
-def execute_shell_command(cd: str, command: str) -> str:
+def execute_shell_command(cd: str, command: str, executable: str = None) -> str:
     """
-    Executes a shell command in a specified directory.
+    Executes a shell command in a specified directory using the chosen shell executable.
 
     Args:
         cd (str): The directory path where the command should be executed.
                   This can be an absolute or relative path.
         command (str): The shell command to execute.
+        executable (str, optional): The shell executable to use. If not provided, a default
+                                    is chosen based on the operating system:
+                                      - On Windows: "cmd.exe"
+                                      - On UNIX-like systems: "/bin/bash"
 
     Returns:
         str: The stdout output from the command execution.
@@ -105,17 +110,32 @@ def execute_shell_command(cd: str, command: str) -> str:
         FileNotFoundError: If the specified directory does not exist.
     """
     import os
+    import platform
     from subprocess import Popen, PIPE
 
-    # Resolve relative paths against the current working directory
+    # Resolve relative paths against the current working directory.
     if not os.path.isabs(cd):
         cd = os.path.abspath(cd)
     
-    # Check if directory exists
+    # Check if directory exists.
     if not os.path.isdir(cd):
         raise FileNotFoundError(f"Directory {cd} does not exist.")
     
-    process = Popen(command, cwd=cd, shell=True, stdout=PIPE, stderr=PIPE)
+    # Determine the shell executable if not provided.
+    if executable is None:
+        if platform.system() == "Windows":
+            executable = "cmd.exe"
+        else:
+            executable = "/bin/bash"
+    
+    process = Popen(
+        command,
+        cwd=cd,
+        shell=True,
+        executable=executable,
+        stdout=PIPE,
+        stderr=PIPE
+    )
     stdout, stderr = process.communicate()
     if process.returncode != 0:
         raise RuntimeError(f"Command failed with error: {stderr.decode()}")
@@ -577,36 +597,106 @@ def get_current_working_directory() -> str:
     return os.getcwd()
 
 @function_tool
-def create_png_from_pixels(file_path: str, width: int, height: int, pixel_array: List[List[int]]) -> None:
+def svg_text_to_png(svg_text: str, png_file_path: str):
     """
-    Creates a PNG image from a colored pixel array.
+    Converts SVG XML text to a PNG file.
 
     Args:
-        file_path (str): The file path where the PNG will be saved.
-        width (int): The width of the image.
-        height (int): The height of the image.
-        pixel_array (List[List[int]]): A list of [R, G, B] pixel values.
-                                       The length must be equal to width * height.
+        svg_text (str): The SVG XML content as a string.
+        png_file_path (str): The file path where the PNG should be saved.
+    """
+    import cairosvg
+    try:
+        cairosvg.svg2png(bytestring=svg_text.encode('utf-8'), write_to=png_file_path)
+    except Exception as e:
+        raise RuntimeError(f"Failed to convert SVG to PNG: {e}")
+
+@function_tool
+def grep_files(
+    pattern: str,
+    directory: str,
+    recursive: bool = True,
+    ignore_case: bool = False,
+    file_extensions: list[str] = None
+) -> dict:
+    """
+    Recursively search for a regex pattern in files within a directory.
+
+    Args:
+        pattern (str): The regex pattern to search for.
+        directory (str): The root directory to search within.
+        recursive (bool): Whether to search subdirectories recursively.
+        ignore_case (bool): Whether to ignore case during matching.
+        file_extensions (list[str], optional): Limit search to files with these extensions.
 
     Returns:
-        None
-
-    Raises:
-        ValueError: If the length of pixel_array does not equal width * height.
-        ImportError: If Pillow is not installed.
+        dict: A mapping of file paths to lists of matching lines.
     """
-    try:
-        from PIL import Image
-    except ImportError:
-        raise ImportError("Pillow is required to create PNGs. Install it with 'pip install pillow'.")
-    
-    if len(pixel_array) != width * height:
-        raise ValueError("Pixel array length must equal width * height.")
-    
-    # Create a new RGB image with the specified dimensions
-    image = Image.new("RGB", (width, height))
-    # Convert each inner list to a tuple
-    image.putdata([tuple(pixel) for pixel in pixel_array])
-    
-    # Save the image in PNG format
-    image.save(file_path, "PNG")
+    flags = re.IGNORECASE if ignore_case else 0
+    regex = re.compile(pattern, flags)
+    matches = {}
+
+    base_path = Path(directory)
+    if not base_path.is_dir():
+        raise ValueError(f"{directory} is not a valid directory.")
+
+    files = base_path.rglob("*") if recursive else base_path.glob("*")
+
+    for file_path in files:
+        if file_path.is_file():
+            if file_extensions and file_path.suffix not in file_extensions:
+                continue
+
+            try:
+                with file_path.open("r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                    matched_lines = [
+                        line.strip() for line in lines if regex.search(line)
+                    ]
+                    if matched_lines:
+                        matches[str(file_path)] = matched_lines
+            except Exception:
+                continue  # skip unreadable files
+
+    return matches
+
+@function_tool
+def get_directory_tree(base_path: str, structure: dict, create_files: bool = True):
+    """
+    Creates a directory tree with optional empty files.
+
+    Args:
+        base_path (str): Root directory where the structure will be created.
+        structure (dict): Nested dict representing the directory structure. 
+                          Keys are directory or file names.
+                          Values are either None (for files) or nested dicts (for subdirectories).
+        create_files (bool): Whether to create empty files specified in the structure.
+
+    Example:
+        structure = {
+            "src": {
+                "main.py": None,
+                "utils": {
+                    "helpers.py": None
+                }
+            },
+            "tests": {
+                "test_main.py": None
+            },
+            "README.md": None
+        }
+    """
+    def _create(path: Path, tree: dict):
+        for name, subtree in tree.items():
+            item_path = path / name
+            if subtree is None:
+                if create_files:
+                    item_path.parent.mkdir(parents=True, exist_ok=True)
+                    item_path.touch(exist_ok=True)
+            else:
+                item_path.mkdir(parents=True, exist_ok=True)
+                _create(item_path, subtree)
+
+    base = Path(base_path)
+    base.mkdir(parents=True, exist_ok=True)
+    _create(base, structure)

@@ -93,4 +93,4 @@ Otherwise, follow debugging best practices:
 ## System Information
 
 Operating System: linux
-Default Shell: /bin/sh
+Default Shell: /bin/bash

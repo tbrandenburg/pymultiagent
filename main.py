@@ -18,11 +18,11 @@ except ImportError:
 
 # Import tools and tests from separate modules
 try:
-    from .tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, create_png_from_pixels
+    from .tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
     from .tests import run_test_cases, format_separator_line
 except ImportError:
     # If relative imports fail, try absolute imports for direct execution
-    from tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, create_png_from_pixels
+    from tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
     from tests import run_test_cases, format_separator_line
 
 # Load environment variables
@@ -379,7 +379,7 @@ async def main():
             instructions="prompts/coder_prompt.txt",
             backend=backend,
             model_name=model_name,
-            tools=[read_file, read_file_lines, write_file, check_directory_exists, check_file_exists, get_current_working_directory, execute_shell_command, create_png_from_pixels]
+            tools=[read_file, read_file_lines, write_file, check_directory_exists, check_file_exists, get_current_working_directory, execute_shell_command, get_directory_tree, grep_files, svg_text_to_png]
         )
 
         knowledge_assistant = create_custom_agent(

@@ -20,7 +20,9 @@ from .function_tools import (
     check_directory_exists,
     check_file_exists,
     get_current_working_directory,
-    create_png_from_pixels
+    get_directory_tree,
+    grep_files,
+    svg_text_to_png
 )
 
 __all__ = [
@@ -38,5 +40,8 @@ __all__ = [
     'check_directory_exists',
     'check_file_exists',
     'get_current_working_directory',
-    'create_png_from_pixels'
+    'create_png_from_pixels',
+    'get_directory_tree,'
+    'grep_files',
+    'svg_text_to_png'
 ]
