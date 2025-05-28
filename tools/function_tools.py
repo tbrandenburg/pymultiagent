@@ -662,7 +662,7 @@ def grep_files(
     return matches
 
 @function_tool
-def get_directory_tree(base_path: str, structure_json: str = None, create_files: bool = True):
+def get_directory_tree(base_path: str, structure_json: str = "{}", create_files: bool = True):
     """
     Creates a directory tree with optional empty files.
 
@@ -689,10 +689,7 @@ def get_directory_tree(base_path: str, structure_json: str = None, create_files:
         }
         '''
     """
-    if structure_json is None:
-        structure = {}
-    else:
-        structure = json.loads(structure_json)
+    structure = json.loads(structure_json)
     def _create(path: Path, tree: dict):
         for name, subtree in tree.items():
             item_path = path / name
