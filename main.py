@@ -26,7 +26,17 @@ except ImportError:
     from tests import run_test_cases, format_separator_line
 
 # Load environment variables
-load_dotenv()
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+else:
+    print("Warning: No .env file found at", env_path)
+    print("The following API keys may be required for full functionality:")
+    print("  - AZURE_OPENAI_API_KEY: For Azure OpenAI models")
+    print("  - OPENAI_API_KEY: For OpenAI models")
+    print("  - LLAMA_OPENAI_API_KEY: For Llama models")
+    print("  - SERPER_API_KEY: For web search functionality")
+    print("Create a .env file with these keys to enable all features.")
 
 # --- Backend Configuration ---
 
