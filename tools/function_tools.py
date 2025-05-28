@@ -8,7 +8,8 @@ import os
 import requests
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, Union
+import json
 from urllib.parse import quote
 import re
 
@@ -661,31 +662,37 @@ def grep_files(
     return matches
 
 @function_tool
-def get_directory_tree(base_path: str, structure: dict, create_files: bool = True):
+def get_directory_tree(base_path: str, structure_json: str = None, create_files: bool = True):
     """
     Creates a directory tree with optional empty files.
 
     Args:
         base_path (str): Root directory where the structure will be created.
-        structure (dict): Nested dict representing the directory structure. 
-                          Keys are directory or file names.
-                          Values are either None (for files) or nested dicts (for subdirectories).
+        structure_json (str): JSON string representing the directory structure. 
+                              Keys are directory or file names.
+                              Values are either null (for files) or nested objects (for subdirectories).
         create_files (bool): Whether to create empty files specified in the structure.
 
     Example:
-        structure = {
+        structure_json = '''
+        {
             "src": {
-                "main.py": None,
+                "main.py": null,
                 "utils": {
-                    "helpers.py": None
+                    "helpers.py": null
                 }
             },
             "tests": {
-                "test_main.py": None
+                "test_main.py": null
             },
-            "README.md": None
+            "README.md": null
         }
+        '''
     """
+    if structure_json is None:
+        structure = {}
+    else:
+        structure = json.loads(structure_json)
     def _create(path: Path, tree: dict):
         for name, subtree in tree.items():
             item_path = path / name
