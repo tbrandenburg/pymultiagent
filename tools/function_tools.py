@@ -89,7 +89,7 @@ def read_file_lines(file_path: Path, start_line: Optional[int] = None, end_line:
 
 
 @function_tool
-def execute_shell_command(cd: str, command: str, executable: str = None) -> str:
+def execute_shell_command(cd: str, command: str, executable: Optional[str] = None) -> str:
     """
     Executes a shell command in a specified directory using the chosen shell executable.
 
@@ -617,7 +617,7 @@ def grep_files(
     directory: str,
     recursive: bool = True,
     ignore_case: bool = False,
-    file_extensions: list[str] = None
+    file_extensions: Optional[List[str]] = None
 ) -> dict:
     """
     Recursively search for a regex pattern in files within a directory.
