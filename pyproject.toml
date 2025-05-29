@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pymultiagent"
+version = "0.1.0"
+description = "Python multi-agent framework"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "pymultiagent authors" },
+]
+
+dependencies = [
+    "gradio",
+    "tqdm",
+    "openai",
+    "openai-agents",
+    "ipykernel",
+    "openpyxl",
+    "python-dotenv",
+    "requests",
+    "pillow",
+    "cairosvg",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+# No scripts/entry points defined - use the module directly
+
+[tool.hatch.build.targets.wheel]
+packages = ["pymultiagent"]
