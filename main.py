@@ -1,3 +1,4 @@
+#!/usr/bin/env uv run python
 """
 PyMultiAgent - A multi-agent system for handling different types of requests.
 

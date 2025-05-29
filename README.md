@@ -30,8 +30,30 @@ cd pymultiagent
 ```
 
 2. Install dependencies:
+
+Option 1: Using pip (traditional approach):
 ```bash
 pip install -r requirements.txt
+```
+
+Option 2: Using uv (recommended - faster installation):
+```bash
+# Install uv if you don't have it
+pip install uv
+
+# Create a virtual environment
+uv venv
+
+# Activate the virtual environment (only needed if you're not using 'uv run')
+source .venv/bin/activate  # On Linux/Mac
+# OR
+# .venv\Scripts\activate  # On Windows
+
+# Install the project with dependencies
+uv pip install -e .
+
+# You can also run the project as a module after installation
+# python -m main
 ```
 
 3. Set up environment variables:
@@ -57,6 +79,10 @@ SERPER_API_KEY=your_serper_api_key
 
 ### Command Line Interface
 
+There are several ways to run PyMultiAgent. The recommended method is Option 2 using UV Run.
+
+#### Option 1: Traditional method (after activating virtual environment)
+
 Run the main application with default settings:
 ```bash
 python main.py
@@ -71,6 +97,57 @@ Run test cases:
 ```bash
 python main.py --tests
 ```
+
+#### Option 2: Using UV Run (RECOMMENDED - no need to activate virtual environment)
+
+Run the main application with default settings:
+```bash
+uv run python main.py
+```
+
+Run with specific backend and model:
+```bash
+uv run python main.py --backend azure --model gpt-4o
+```
+
+Run test cases:
+```bash
+uv run python main.py --tests
+```
+
+#### Option 3: Using the executable script
+
+After adding a shebang line to main.py and making it executable:
+```bash
+chmod +x main.py
+```
+
+Run the main application directly:
+```bash
+./main.py
+```
+
+Run with specific options:
+```bash
+./main.py --backend azure --model gpt-4o
+```
+
+#### Option 4: Using a Python module
+
+You can run the project as a Python module:
+```bash
+# After activating virtual environment
+python -m main
+
+# With arguments
+python -m main --backend azure --model gpt-4o
+
+# Or directly with uv
+uv run python -m main
+```
+
+This approach treats the main.py file as a module and runs it directly.
+
 
 ### Command Line Options
 

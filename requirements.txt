@@ -1,10 +1,15 @@
+# This file is maintained for backward compatibility
+# For modern Python package management, please use pyproject.toml with tools like uv or pip
+# To install with uv: uv pip install -e .
+# To install with pip: pip install -e .
+
 gradio
 tqdm
 openai
 openai-agents
 ipykernel
 openpyxl
-dotenv
+python-dotenv
 requests
 pillow
 cairosvg
