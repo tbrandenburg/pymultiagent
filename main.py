@@ -11,7 +11,6 @@ import argparse
 from dotenv import load_dotenv
 
 try:
-    from openai.types.responses import ResponseFunctionToolCall
     # Try importing backends and assistants as relative modules (when imported as a package)
     from .backends import (
         initialize_backend_types,
@@ -19,16 +18,17 @@ try:
         Backends
     )
     from .assistants import Assistant
+    from .chat import CLIChat
 except ImportError:
     try:
         # Try absolute imports (when run directly)
-        from openai.types.responses import ResponseFunctionToolCall
         from backends import (
             initialize_backend_types,
             configure_backends,
             Backends
         )
         from assistants import Assistant
+        from chat import CLIChat
     except ImportError:
         raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
 
@@ -171,87 +171,7 @@ def process_chat_history(chat_history, new_response):
 
 
 # --- Interactive Chat ---
-
-async def run_interactive_chat(triage_assistant, max_turns):
-    """
-    Run an interactive chat session with the user, streaming responses.
-
-    Args:
-        triage_assistant: The initialized triage assistant
-        max_turns (int): Maximum turns allowed for each agent run
-    """
-    print("--- Interactive Chat Mode ---")
-    print("Type 'exit' to end the conversation")
-    print("Type 'help' for available commands")
-
-    chat_history = []
-
-    while True:
-        prompt = input("\nEnter the next prompt (or 'exit'): ")
-
-        # Handle special commands
-        if prompt.lower() == "exit":
-            print("Exiting chat mode. Goodbye!")
-            break
-        elif prompt.lower() == "help":
-            print("\nAvailable commands:")
-            print("  exit - End the conversation")
-            print("  help - Show this help message")
-            print("  clear - Clear the chat history")
-            continue
-        elif prompt.lower() == "clear":
-            chat_history = []
-            print("Chat history cleared.")
-            continue
-
-        # Add user input to chat history
-        chat_history = chat_history + [{"role": "user", "content": prompt}]
-
-        print("Processing your request (streaming)...")
-
-        try:
-            # Stream the response from the assistant system with max_turns limit
-            streamed_output = ""
-            last_agent = None
-            # Using the Assistant's run_streamed method directly
-            stream = triage_assistant.run_streamed(
-                input_messages=chat_history,
-                max_turns=max_turns
-            )
-            async for event in stream.stream_events():
-                if event.type == "raw_response_event":
-                    from openai.types.responses import ResponseTextDeltaEvent
-                    if isinstance(event.data, ResponseTextDeltaEvent):
-                        print(event.data.delta, end="", flush=True)
-                        streamed_output += event.data.delta
-                elif event.type == "agent_updated_stream_event":
-                    last_agent = event.new_agent
-                    print(f"  Agent updated: {last_agent.name}", flush=True)
-                elif event.type == "run_item_stream_event":
-                    from agents import ItemHelpers
-                    if event.item.type == "tool_call_item":
-                        if hasattr(event.item, "raw_item") and isinstance(event.item.raw_item, ResponseFunctionToolCall):
-                            tool_call = event.item.raw_item
-                            print(f"  Tool call: {tool_call.name}{tool_call.arguments[:100]}...", flush=True)
-                        else:
-                            print("  Tool was called", flush=True)
-                    elif event.item.type == "tool_call_output_item":
-                        print(f"  Tool output: {event.item.output}", flush=True)
-                    elif event.item.type == "message_output_item":
-                        text = ItemHelpers.text_message_output(event.item)
-                        # If no token output has been printed, use this complete text as final output.
-                        if not streamed_output:
-                            streamed_output = text
-
-            print()  # Newline after streaming output
-
-            # Update chat history with the streamed response
-            chat_history = chat_history + [{"role": "assistant", "content": streamed_output}]
-        except Exception as e:
-            print(f"\nError processing request: {e}")
-            print("Your message was not added to the chat history.")
-            if chat_history:
-                chat_history.pop()
+# The interactive chat functionality is now provided by the CLIChat class in chat.py
 
 # --- Main Function ---
 
@@ -372,7 +292,8 @@ async def main():
 
         # Run interactive chat if requested, passing max_turns
         if args["interactive"]:
-            await run_interactive_chat(triage_assistant, max_turns=args["max_turns"])
+            cli_chat = CLIChat(triage_assistant, max_turns=args["max_turns"])
+            await cli_chat.run()
 
     except Exception as e:
         print(f"Error: {e}")
