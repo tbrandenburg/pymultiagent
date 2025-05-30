@@ -11,11 +11,28 @@ import argparse
 from dotenv import load_dotenv
 
 try:
-    from agents import Agent, OpenAIChatCompletionsModel, Runner
-    from openai import AsyncOpenAI, AsyncAzureOpenAI
+    from agents import Agent, Runner
     from openai.types.responses import ResponseFunctionToolCall
+    # Try importing backends as a relative module (when imported as a package)
+    from .backends import (
+        initialize_backend_types,
+        configure_backends,
+        get_chat_model,
+        Backends
+    )
 except ImportError:
-    raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
+    try:
+        # Try absolute imports (when run directly)
+        from agents import Agent, Runner
+        from openai.types.responses import ResponseFunctionToolCall
+        from backends import (
+            initialize_backend_types,
+            configure_backends,
+            get_chat_model,
+            Backends
+        )
+    except ImportError:
+        raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
 
 # Import tools and tests from separate modules
 try:
@@ -39,97 +56,11 @@ else:
     print("  - SERPER_API_KEY: For web search functionality")
     print("Create a .env file with these keys to enable all features.")
 
-# --- Backend Configuration ---
+# Initialize the backend types (client classes only)
+initialize_backend_types()
 
-BACKEND_CONFIGS = {
-    "llama": {
-        "client_class": AsyncOpenAI,
-        "api_key": os.getenv("LLAMA_OPENAI_API_KEY", "dummy"),
-        "endpoint": os.getenv("LLAMA_OPENAI_ENDPOINT", "http://localhost:8000/v1/"),
-        "models": {
-            "llama3.2": {},
-            "llama3.3": {}
-        },
-        "client_kwargs": lambda cfg, model: {
-            "api_key": cfg["api_key"],
-            "base_url": cfg["endpoint"]
-        }
-    },
-    "azure": {
-        "client_class": AsyncAzureOpenAI,
-        "api_key": os.getenv("AZURE_OPENAI_API_KEY", ""),
-        "endpoint": os.getenv("AZURE_OPENAI_ENDPOINT", "https://openaiapimanagementxcse.azure-api.net"),
-        "models": {
-            "gpt-4o": {
-                "deployment": "gpt-4o",
-                "api_version": "2025-01-01-preview"
-            },
-            "gpt-4o-mini": {
-                "deployment": "gpt-4o-mini",
-                "api_version": "2025-01-01-preview"
-            },
-            "o3-mini": {
-                "deployment": "o3-mini",
-                "api_version": "2025-01-01-preview"
-            },
-            "o4-mini": {
-                "deployment": "o4-mini",
-                "api_version": "2025-01-01-preview"
-            }
-        },
-        "client_kwargs": lambda cfg, model: {
-            "api_key": cfg["api_key"],
-            "api_version": cfg["models"][model]["api_version"],
-            "azure_endpoint": cfg["endpoint"],
-            "azure_deployment": cfg["models"][model]["deployment"],
-            "default_headers": {
-                "Ocp-Apim-Subscription-Key": cfg["api_key"],
-                "api-key": cfg["api_key"]
-            }
-        }
-    },
-    "openai": {
-        "client_class": AsyncOpenAI,
-        "api_key": os.getenv("OPENAI_API_KEY", ""),
-        "endpoint": os.getenv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/"),
-        "models": {
-            "gpt-3.5-turbo": {},
-            "gpt-4": {},
-            "gpt-4-turbo": {},
-            "gpt-4o": {},
-            "gpt-4o-mini": {},
-            "o3-mini": {},
-            "o4-mini": {}
-        },
-        "client_kwargs": lambda cfg, model: {
-            "api_key": cfg["api_key"]
-        }
-    }
-}
-
-# --- Factory Functions ---
-
-def create_openai_client(backend: str, model_name: str):
-    """
-    Initializes the client for a given backend and model.
-    """
-    config = BACKEND_CONFIGS.get(backend)
-    if not config:
-        raise ValueError(f"Unsupported backend: {backend}")
-
-    if model_name not in config["models"]:
-        raise ValueError(f"Unsupported model '{model_name}' for backend '{backend}'")
-
-    client_class = config["client_class"]
-    client = client_class(**config["client_kwargs"](config, model_name))
-    return client
-
-def get_chat_model(backend: str = "azure", model_name: str = "o4-mini"):
-    """
-    Returns an OpenAIChatCompletionsModel using the selected backend and model.
-    """
-    client = create_openai_client(backend, model_name)
-    return OpenAIChatCompletionsModel(openai_client=client, model=model_name)
+# Configure backends with API keys, endpoints, and models
+configure_backends()
 
 
 # --- Agent Creation ---
@@ -188,7 +119,7 @@ Examples:
     )
 
     # Get available backends and models for help text
-    available_backends = list(BACKEND_CONFIGS.keys())
+    available_backends = Backends.get_registered_types()
 
     parser.add_argument(
         "--backend",
@@ -232,6 +163,22 @@ Examples:
         "interactive": not args.no_interactive,
         "run_tests": args.tests
     }
+
+    # Validate backend and model configuration
+    backend = config["backend"]
+    model_name = config["model"]
+
+    if backend not in Backends.get_registered_types():
+        raise ValueError(f"Unsupported backend: {backend}")
+
+    backend_instance = Backends.get(backend)
+    available_models = backend_instance.get_models()
+    
+    if model_name not in available_models and available_models:
+        # Use the first available model for the backend if specified model is not available
+        model_name = available_models[0]
+        print(f"Model '{config['model']}' not available for backend '{backend}'. Using '{model_name}' instead.")
+        config["model"] = model_name
 
     return config
 
@@ -349,18 +296,9 @@ async def main():
     args = parse_command_line_args()
 
     try:
-        # Validate backend and model configuration
+        # Get backend and model configuration
         backend = args["backend"]
         model_name = args["model"]
-
-        if backend not in BACKEND_CONFIGS:
-            raise ValueError(f"Unsupported backend: {backend}")
-
-        if model_name not in BACKEND_CONFIGS[backend]["models"]:
-            # Use the first available model for the backend if specified model is not available
-            available_models = list(BACKEND_CONFIGS[backend]["models"].keys())
-            model_name = available_models[0]
-            print(f"Model '{args['model']}' not available for backend '{backend}'. Using '{model_name}' instead.")
 
         # Create agent models with different configuration settings via create_custom_agent
         date_assistant = create_custom_agent(

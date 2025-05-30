@@ -258,6 +258,73 @@ def my_new_tool(param1: str, param2: int = 0) -> str:
 
 Then import and add it to the appropriate agent's tools list.
 
+## Backend System
+
+PyMultiAgent uses a modular backend system that allows for using different LLM providers with a unified interface:
+
+### Backend Architecture
+
+The backend system consists of:
+
+1. **Backend Class Hierarchy**:
+   - `Backend` (abstract base class): Defines the common interface for all backends
+   - `AzureBackend`: Implementation for Azure OpenAI services
+   - `OpenAIBackend`: Implementation for OpenAI API
+   - `LlamaBackend`: Implementation for local Llama models
+
+2. **Backends Registry**:
+   - Central registry for all backends
+   - Manages backend registration and configuration
+   - Provides factory methods for creating clients and models
+
+3. **Configuration Flow**:
+   - At compile time: Backend types are registered with their client classes
+   - At runtime: Backends are configured with API keys and endpoints
+   - At runtime: Models are added to specific backends
+
+### Using Different Backends
+
+To use a specific backend and model:
+
+```bash
+# Using Azure backend with o4-mini model
+uv run python main.py --backend azure --model o4-mini
+
+# Using OpenAI backend with gpt-4 model
+uv run python main.py --backend openai --model gpt-4
+
+# Using local Llama backend
+uv run python main.py --backend llama --model llama3.3
+```
+
+### Extending with New Backends
+
+To add a new backend provider:
+
+1. Create a new backend class that inherits from the `Backend` base class
+2. Implement the required methods, especially `create_client()`
+3. Register the new backend during initialization
+
+```python
+class MyNewBackend(Backend):
+    def __init__(self):
+        super().__init__("my_new_backend")
+        self.api_key = None
+        self.endpoint = None
+        
+    def configure(self, api_key, endpoint):
+        self.api_key = api_key
+        self.endpoint = endpoint
+        return self
+        
+    def create_client(self, model_name):
+        # Implementation for creating client
+        ...
+
+# Register the new backend
+Backends.register(MyNewBackend())
+```
+
 ## Architecture
 
 PyMultiAgent follows a hierarchical architecture:
