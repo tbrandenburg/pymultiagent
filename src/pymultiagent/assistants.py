@@ -14,7 +14,7 @@ try:
 except ImportError:
     # Try absolute imports (when run directly)
     from agents import Agent, Runner
-    from backends import get_chat_model
+    from pymultiagent.backends import get_chat_model
 
 
 class Assistant:

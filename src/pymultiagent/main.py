@@ -22,13 +22,13 @@ try:
 except ImportError:
     try:
         # Try absolute imports (when run directly)
-        from backends import (
+        from pymultiagent.backends import (
             initialize_backend_types,
             configure_backends,
             Backends
         )
-        from assistants import Assistant
-        from chat import CLIChat
+        from pymultiagent.assistants import Assistant
+        from pymultiagent.chat import CLIChat
     except ImportError:
         raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
 
@@ -38,8 +38,8 @@ try:
     from .tests import run_test_cases, format_separator_line
 except ImportError:
     # If relative imports fail, try absolute imports for direct execution
-    from tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
-    from tests import run_test_cases, format_separator_line
+    from pymultiagent.tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
+    from pymultiagent.tests import run_test_cases, format_separator_line
 
 # Load environment variables
 # First check for .env in current working directory

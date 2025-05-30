@@ -4,8 +4,8 @@ Example script demonstrating how to use the chat interfaces.
 """
 import asyncio
 import argparse
-from assistants import Assistant
-from chat import CLIChat
+from pymultiagent.assistants import Assistant
+from pymultiagent.chat import CLIChat
 
 async def main():
     """
