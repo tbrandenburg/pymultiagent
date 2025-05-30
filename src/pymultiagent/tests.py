@@ -6,11 +6,7 @@ and specialized agents in the multi-agent system.
 """
 import time
 
-try:
-    from agents import Runner
-except ImportError:
-    raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
-
+from agents import Runner
 
 def sum_total_tokens(raw_responses):
     """
@@ -72,12 +68,12 @@ def print_agent_inner_dialog(result):
 
 async def run_test_cases(triage_assistant):
     """Run predefined test cases for the triage assistant.
-    
+
     Args:
         triage_assistant: An Assistant instance or an OpenAI Agent instance
     """
     start_time = time.time()
-    
+
     # Get the agent to use for tests
     if hasattr(triage_assistant, 'get_agent'):
         # If it's an Assistant, get its agent

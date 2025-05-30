@@ -10,36 +10,11 @@ import asyncio
 import argparse
 from dotenv import load_dotenv
 
-try:
-    # Try importing backends and assistants as relative modules (when imported as a package)
-    from .backends import (
-        initialize_backend_types,
-        configure_backends,
-        Backends
-    )
-    from .assistants import Assistant
-    from .chat import CLIChat
-except ImportError:
-    try:
-        # Try absolute imports (when run directly)
-        from pymultiagent.backends import (
-            initialize_backend_types,
-            configure_backends,
-            Backends
-        )
-        from pymultiagent.assistants import Assistant
-        from pymultiagent.chat import CLIChat
-    except ImportError:
-        raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
-
-# Import tools and tests from separate modules
-try:
-    from .tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
-    from .tests import run_test_cases, format_separator_line
-except ImportError:
-    # If relative imports fail, try absolute imports for direct execution
-    from pymultiagent.tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
-    from pymultiagent.tests import run_test_cases, format_separator_line
+from pymultiagent.backends import initialize_backend_types, configure_backends, Backends
+from pymultiagent.assistants import Assistant
+from pymultiagent.chat import CLIChat
+from pymultiagent.tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
+from pymultiagent.tests import run_test_cases, format_separator_line
 
 # Load environment variables
 # First check for .env in current working directory
@@ -113,7 +88,7 @@ Examples:
         default="gpt-4o-mini",
         help="Model to use (default: %(default)s). Available models depend on backend."
     )
-    
+
     parser.add_argument(
         "--max_turns",
         type=int,
@@ -153,7 +128,7 @@ Examples:
 
     backend_instance = Backends.get(backend)
     available_models = backend_instance.get_models()
-    
+
     if model_name not in available_models and available_models:
         # Use the first available model for the backend if specified model is not available
         model_name = available_models[0]
@@ -284,7 +259,7 @@ async def main():
             ),
             backend=backend,
             model_name=model_name,
-            handoffs=[date_assistant, time_assistant, code_assistant, 
+            handoffs=[date_assistant, time_assistant, code_assistant,
                      writing_assistant, math_assistant, knowledge_assistant]
         )
 
