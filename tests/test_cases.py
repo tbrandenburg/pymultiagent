@@ -70,14 +70,26 @@ def print_agent_inner_dialog(result):
         print("No raw responses available to show inner dialog.")
 
 
-async def run_test_cases(triage_agent):
-    """Run predefined test cases for the triage agent."""
+async def run_test_cases(triage_assistant):
+    """Run predefined test cases for the triage assistant.
+    
+    Args:
+        triage_assistant: An Assistant instance or an OpenAI Agent instance
+    """
     start_time = time.time()
+    
+    # Get the agent to use for tests
+    if hasattr(triage_assistant, 'get_agent'):
+        # If it's an Assistant, get its agent
+        agent_to_use = triage_assistant.get_agent()
+    else:
+        # If it's already an OpenAI Agent
+        agent_to_use = triage_assistant
 
     # Test Case 1: Date request - should be handled by Date Assistant
     print("--- Test Case 1: Date Request ---")
     result_date_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Hello, what is the current date?",
     )
 
@@ -94,7 +106,7 @@ async def run_test_cases(triage_agent):
     # Test Case 2: Time request - should be handled by Time Assistant
     print("--- Test Case 2: Time Request ---")
     result_time_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="What time is it right now?",
     )
 
@@ -111,7 +123,7 @@ async def run_test_cases(triage_agent):
     # Test Case 3: Coding request - should be handled by Code Assistant
     print("--- Test Case 3: Coding Request ---")
     result_code_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Write a Python function to calculate the Fibonacci sequence, save it to a file underneath the current directory 'build', and execute it.",
     )
 
@@ -128,7 +140,7 @@ async def run_test_cases(triage_agent):
     # Test Case 4: Writing request - should be handled by Writing Assistant
     print("--- Test Case 4: Writing Request ---")
     result_writing_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Help me write a professional email to request a meeting with a client",
     )
 
@@ -145,7 +157,7 @@ async def run_test_cases(triage_agent):
     # Test Case 5: Math request - should be handled by Math Assistant
     print("--- Test Case 5: Math Request ---")
     result_math_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Calculate the integral of x^2 with respect to x",
     )
 
@@ -162,7 +174,7 @@ async def run_test_cases(triage_agent):
     # Test Case 6: Knowledge Request - should be handled by the Knowledge Assistant
     print("--- Test Case 6: Knowledge Request ---")
     result_general_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Hello, tell me something about MAX4 in Lund, Sweden",
     )
 
@@ -179,7 +191,7 @@ async def run_test_cases(triage_agent):
     # Test Case 7: General request - should be handled by Triage Agent directly
     print("--- Test Case 7: General Request ---")
     result_knowledge_request = await Runner.run(
-        triage_agent,
+        agent_to_use,
         input="Hello, how can you help me today?",
     )
 

@@ -11,26 +11,24 @@ import argparse
 from dotenv import load_dotenv
 
 try:
-    from agents import Agent, Runner
     from openai.types.responses import ResponseFunctionToolCall
-    # Try importing backends as a relative module (when imported as a package)
+    # Try importing backends and assistants as relative modules (when imported as a package)
     from .backends import (
         initialize_backend_types,
         configure_backends,
-        get_chat_model,
         Backends
     )
+    from .assistants import Assistant
 except ImportError:
     try:
         # Try absolute imports (when run directly)
-        from agents import Agent, Runner
         from openai.types.responses import ResponseFunctionToolCall
         from backends import (
             initialize_backend_types,
             configure_backends,
-            get_chat_model,
             Backends
         )
+        from assistants import Assistant
     except ImportError:
         raise ImportError("Required packages not found. Please install with 'pip install openai openai-agents'")
 
@@ -65,32 +63,7 @@ configure_backends()
 
 # --- Agent Creation ---
 
-def create_custom_agent(name, instructions, backend="azure", model_name="o4-mini", tools=None, handoffs=None):
-    """
-    Create a custom agent with specified parameters and internal model creation.
-
-    Args:
-        name (str): The name of the agent
-        instructions (str): The instructions for the agent, or a file path to a text file containing the agent prompt
-        backend (str): The backend to use (azure, llama)
-        model_name (str): The model name to use for this agent
-        tools (list, optional): List of tools available to the agent
-        handoffs (list, optional): List of agents for handoffs (used by triage)
-
-    Returns:
-        Agent: Configured custom agent
-    """
-    import os
-    if os.path.isfile(instructions):
-        with open(instructions, "r") as f:
-            instructions = f.read()
-    model = get_chat_model(backend=backend, model_name=model_name)
-    kwargs = {"name": name, "instructions": instructions, "model": model}
-    if tools:
-        kwargs["tools"] = tools
-    if handoffs:
-        kwargs["handoffs"] = handoffs
-    return Agent(**kwargs)
+# The create_custom_agent function is now imported from assistants.py
 
 # --- Utility Functions ---
 
@@ -199,12 +172,12 @@ def process_chat_history(chat_history, new_response):
 
 # --- Interactive Chat ---
 
-async def run_interactive_chat(triage_agent, max_turns):
+async def run_interactive_chat(triage_assistant, max_turns):
     """
     Run an interactive chat session with the user, streaming responses.
 
     Args:
-        triage_agent: The initialized triage agent
+        triage_assistant: The initialized triage assistant
         max_turns (int): Maximum turns allowed for each agent run
     """
     print("--- Interactive Chat Mode ---")
@@ -237,13 +210,13 @@ async def run_interactive_chat(triage_agent, max_turns):
         print("Processing your request (streaming)...")
 
         try:
-            # Stream the response from the agent system with max_turns limit
+            # Stream the response from the assistant system with max_turns limit
             streamed_output = ""
             last_agent = None
-            stream = Runner.run_streamed(
-                triage_agent,
-                input=chat_history,
-                max_turns=max_turns  # new parameter added
+            # Using the Assistant's run_streamed method directly
+            stream = triage_assistant.run_streamed(
+                input_messages=chat_history,
+                max_turns=max_turns
             )
             async for event in stream.stream_events():
                 if event.type == "raw_response_event":
@@ -300,8 +273,8 @@ async def main():
         backend = args["backend"]
         model_name = args["model"]
 
-        # Create agent models with different configuration settings via create_custom_agent
-        date_assistant = create_custom_agent(
+        # Create specialized assistants
+        date_assistant = Assistant(
             name="Date Assistant",
             instructions=(
                 "You are a helpful date assistant. Be concise and professional. "
@@ -312,7 +285,7 @@ async def main():
             tools=[get_current_date]
         )
 
-        time_assistant = create_custom_agent(
+        time_assistant = Assistant(
             name="Time Assistant",
             instructions=(
                 "You are a helpful time assistant. Be concise and professional. "
@@ -323,7 +296,7 @@ async def main():
             tools=[get_current_time]
         )
 
-        code_assistant = create_custom_agent(
+        code_assistant = Assistant(
             name="Coder Assistant",
             instructions="prompts/coder_prompt.txt",
             backend=backend,
@@ -331,7 +304,7 @@ async def main():
             tools=[read_file, read_file_lines, write_file, check_directory_exists, check_file_exists, get_current_working_directory, execute_shell_command, get_directory_tree, grep_files, svg_text_to_png]
         )
 
-        knowledge_assistant = create_custom_agent(
+        knowledge_assistant = Assistant(
             name="Knowledge Assistant",
             instructions=(
                 "You are a helpful knowledge assistant. You are highly knowledgeable across a wide range of topics and disciplines."
@@ -349,7 +322,7 @@ async def main():
             tools=[search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content]
         )
 
-        writing_assistant = create_custom_agent(
+        writing_assistant = Assistant(
             name="Writing Assistant",
             instructions=(
                 "You are a professional writing assistant. You excel at creating clear, engaging, and error-free text."
@@ -361,7 +334,7 @@ async def main():
             tools=[]  # No specialized tools for this example
         )
 
-        math_assistant = create_custom_agent(
+        math_assistant = Assistant(
             name="Math Assistant",
             instructions=(
                 "You are a specialized mathematics assistant. You can help with calculations, "
@@ -373,8 +346,9 @@ async def main():
             tools=[]  # No specialized tools for this example
         )
 
-        # Create triage agent via create_custom_agent with handoffs
-        triage_agent = create_custom_agent(
+        # Create triage assistant with handoffs to other assistants
+        # The internal agents are created automatically during initialization
+        triage_assistant = Assistant(
             name="Triage Agent",
             instructions=(
                 "You are a general-purpose Triage Agent. Your primary role is to understand the user's intent "
@@ -383,7 +357,8 @@ async def main():
             ),
             backend=backend,
             model_name=model_name,
-            handoffs = [date_assistant, time_assistant, code_assistant, writing_assistant, math_assistant, knowledge_assistant]
+            handoffs=[date_assistant, time_assistant, code_assistant, 
+                     writing_assistant, math_assistant, knowledge_assistant]
         )
 
         # Print summary of available agents
@@ -391,12 +366,13 @@ async def main():
         print("\n" + format_separator_line() + "\n")
 
         # Run test cases if requested
+        # Run tests or interactive mode
         if args["run_tests"]:
-            await run_test_cases(triage_agent)
+            await run_test_cases(triage_assistant)
 
         # Run interactive chat if requested, passing max_turns
         if args["interactive"]:
-            await run_interactive_chat(triage_agent, max_turns=args["max_turns"])
+            await run_interactive_chat(triage_assistant, max_turns=args["max_turns"])
 
     except Exception as e:
         print(f"Error: {e}")
