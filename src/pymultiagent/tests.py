@@ -199,7 +199,7 @@ async def run_test_cases(triage_assistant):
     print_agent_inner_dialog(result_knowledge_request)
 
     total_tokens_knowledge_request = sum_total_tokens(result_knowledge_request.raw_responses)
-    print(f"\nTotal Tokens Used for General Request: {result_knowledge_request}")
+    print(f"\nTotal Tokens Used for General Request: {total_tokens_knowledge_request}")
     print(f"\nFinal response (General Request): {result_knowledge_request.final_output}")
     print(f"\nAgent responsible: {result_knowledge_request.last_agent.name}")
 

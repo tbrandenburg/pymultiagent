@@ -1,4 +1,4 @@
-#!/usr/bin/env uv run python
+#!/usr/bin/env python
 """
 PyMultiAgent - A multi-agent system for handling different types of requests.
 
@@ -42,11 +42,18 @@ except ImportError:
     from tests import run_test_cases, format_separator_line
 
 # Load environment variables
-env_path = os.path.join(os.path.dirname(__file__), '.env')
-if os.path.exists(env_path):
-    load_dotenv(env_path)
+# First check for .env in current working directory
+cwd_env_path = os.path.join(os.getcwd(), '.env')
+package_env_path = os.path.join(os.path.dirname(__file__), '.env')
+
+if os.path.exists(cwd_env_path):
+    load_dotenv(cwd_env_path)
+    print(f"Loaded environment from {cwd_env_path}")
+elif os.path.exists(package_env_path):
+    load_dotenv(package_env_path)
+    print(f"Loaded environment from {package_env_path}")
 else:
-    print("Warning: No .env file found at", env_path)
+    print("Warning: No .env file found in current directory or package directory")
     print("The following API keys may be required for full functionality:")
     print("  - AZURE_OPENAI_API_KEY: For Azure OpenAI models")
     print("  - OPENAI_API_KEY: For OpenAI models")
@@ -301,5 +308,12 @@ async def main():
 
     return 0
 
+def cli_main():
+    """
+    Command-line interface entry point.
+    This function is the entry point for the 'pymultiagent' command.
+    """
+    return asyncio.run(main())
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    cli_main()

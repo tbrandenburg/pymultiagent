@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "pymultiagent"
@@ -31,7 +31,11 @@ dev = [
     "pytest",
 ]
 
-# No scripts/entry points defined - use the module directly
+[project.scripts]
+pymultiagent = "pymultiagent.main:cli_main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["pymultiagent"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.hatch.build]
+packages = ["src/pymultiagent"]

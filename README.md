@@ -1,4 +1,4 @@
-﻿# PyMultiAgent
+# PyMultiAgent
 
 A simple yet powerful multi-agent framework built on top of the OpenAI Agent SDK.
 
@@ -16,137 +16,179 @@ Key features:
 
 ## Installation
 
+### Quick Installation
+
+You can install PyMultiAgent directly from the repository:
+
+```bash
+# Using pip
+pip install git+https://github.com/tbrandenburg/pymultiagent.git
+
+# Using uv
+uv pip install git+https://github.com/tbrandenburg/pymultiagent.git
+```
+
+### Development Installation
+
+For development or customization:
+
+```bash
+# Clone the repository
+git clone https://github.com/tbrandenburg/pymultiagent.git
+cd pymultiagent
+
+# Install in development mode with pip
+pip install -e .
+
+# Or with uv
+uv pip install -e .
+```
+
+### Running the CLI
+
+After installation, you can run the interactive chat mode using:
+
+```bash
+# Run the CLI command (simplest method)
+pymultiagent
+
+# Run with specific options
+pymultiagent --backend azure --model gpt-4o --max_turns 20
+```
+
+Alternatively, you can run it as a Python module:
+
+```bash
+python -m pymultiagent
+```
+
+If you're using uv:
+
+```bash
+uv run python -m pymultiagent
+```
+
+### Environment Configuration
+
+PyMultiAgent requires several API keys to enable full functionality. Create a `.env` file in your current working directory with the following keys:
+
+```
+# Azure OpenAI (primary backend)
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+AZURE_OPENAI_ENDPOINT=your_azure_openai_endpoint
+
+# OpenAI (alternative backend)
+OPENAI_API_KEY=your_openai_api_key
+
+# Llama (alternative backend)
+LLAMA_OPENAI_API_KEY=your_llama_api_key
+LLAMA_OPENAI_ENDPOINT=your_llama_endpoint
+
+# Web Search (for knowledge assistant)
+SERPER_API_KEY=your_serper_api_key
+```
+
+The system will first look for a `.env` file in your current working directory, and then fall back to the package installation directory if none is found.
+
 ### Prerequisites
 
 - Python 3.8 or higher
 - OpenAI API key, Azure OpenAI API key, or local Llama model
 
-### Setup
+### Manual Setup
+
+If you prefer to set up the project manually:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/pymultiagent.git
+git clone https://github.com/tbrandenburg/pymultiagent.git
 cd pymultiagent
 ```
 
-2. Install dependencies:
+2. Set up a virtual environment:
 
-Option 1: Using pip (traditional approach):
 ```bash
-pip install -r requirements.txt
-```
-
-Option 2: Using uv (recommended - faster installation):
-```bash
-# Install uv if you don't have it
-pip install uv
-
-# Create a virtual environment
-uv venv
-
-# Activate the virtual environment (only needed if you're not using 'uv run')
+# Using Python's built-in venv
+python -m venv .venv
 source .venv/bin/activate  # On Linux/Mac
 # OR
 # .venv\Scripts\activate  # On Windows
 
-# Install the project with dependencies
-uv pip install -e .
+# Install in development mode
+pip install -e .
+```
 
-# You can also run the project as a module after installation
-# python -m main
+Or with uv:
+
+```bash
+# Install uv if needed
+pip install uv
+
+# Create and use a virtual environment
+uv venv
+source .venv/bin/activate  # On Linux/Mac
+# OR
+# .venv\Scripts\activate  # On Windows
+
+# Install in development mode
+uv pip install -e .
 ```
 
 3. Set up environment variables:
-Create a `.env` file in the project root with your API keys:
-
-```
-# For OpenAI backend
-OPENAI_API_KEY=your_openai_api_key
-
-# For Azure OpenAI backend
-AZURE_OPENAI_API_KEY=your_azure_openai_api_key
-AZURE_OPENAI_ENDPOINT=your_azure_endpoint
-
-# For Llama local model
-LLAMA_OPENAI_API_KEY=dummy
-LLAMA_OPENAI_ENDPOINT=http://localhost:8000/v1/
-
-# Optional: Serper API for web search
-SERPER_API_KEY=your_serper_api_key
-```
+Create a `.env` file in your current working directory with your API keys like described above.
 
 ## Usage
 
 ### Command Line Interface
 
-There are several ways to run PyMultiAgent. The recommended method is Option 2 using UV Run.
+There are several ways to run PyMultiAgent after installation:
 
-#### Option 1: Traditional method (after activating virtual environment)
+#### Option 1: Using the CLI command (Recommended)
 
-Run the main application with default settings:
+After installing the package, you can use the `pymultiagent` command:
+
 ```bash
-python main.py
+# Run with default settings
+pymultiagent
+
+# With specific backend and model
+pymultiagent --backend azure --model gpt-4o
+
+# Run test cases before interactive mode
+pymultiagent --tests
 ```
 
-Run with specific backend and model:
-```bash
-python main.py --backend azure --model gpt-4o
-```
-
-Run test cases:
-```bash
-python main.py --tests
-```
-
-#### Option 2: Using UV Run (RECOMMENDED - no need to activate virtual environment)
-
-Run the main application with default settings:
-```bash
-uv run python main.py
-```
-
-Run with specific backend and model:
-```bash
-uv run python main.py --backend azure --model gpt-4o
-```
-
-Run test cases:
-```bash
-uv run python main.py --tests
-```
-
-#### Option 3: Using the executable script
-
-After adding a shebang line to main.py and making it executable:
-```bash
-chmod +x main.py
-```
-
-Run the main application directly:
-```bash
-./main.py
-```
-
-Run with specific options:
-```bash
-./main.py --backend azure --model gpt-4o
-```
-
-#### Option 4: Using a Python module
+#### Option 2: Using Python Module
 
 You can run the project as a Python module:
+
 ```bash
-# After activating virtual environment
-python -m main
+# Run with default settings
+python -m pymultiagent
 
 # With arguments
-python -m main --backend azure --model gpt-4o
+python -m pymultiagent --backend azure --model gpt-4o --max_turns 20
 
-# Or directly with uv
-uv run python -m main
+# Run test cases
+python -m pymultiagent --tests
 ```
 
-This approach treats the main.py file as a module and runs it directly.
+#### Option 3: Using UV Run (No virtual environment activation needed)
+
+If you use UV, you can run the package directly:
+
+```bash
+# Run with default settings
+uv run python -m pymultiagent
+
+# With arguments (note the double dash)
+uv run python -m pymultiagent -- --backend azure --model gpt-4o
+
+# Run test cases
+uv run python -m pymultiagent -- --tests
+```
+
+**Note**: When passing arguments with `uv run`, you must use a double dash (`--`) to separate the package name from its arguments.
 
 
 ### Command Line Options
@@ -288,13 +330,13 @@ To use a specific backend and model:
 
 ```bash
 # Using Azure backend with o4-mini model
-uv run python main.py --backend azure --model o4-mini
+uv run python -m pymultiagent -- --backend azure --model o4-mini
 
 # Using OpenAI backend with gpt-4 model
-uv run python main.py --backend openai --model gpt-4
+uv run python -m pymultiagent -- --backend openai --model gpt-4
 
 # Using local Llama backend
-uv run python main.py --backend llama --model llama3.3
+uv run python -m pymultiagent -- --backend llama --model llama3.3
 ```
 
 ### Extending with New Backends
@@ -311,12 +353,12 @@ class MyNewBackend(Backend):
         super().__init__("my_new_backend")
         self.api_key = None
         self.endpoint = None
-        
+
     def configure(self, api_key, endpoint):
         self.api_key = api_key
         self.endpoint = endpoint
         return self
-        
+
     def create_client(self, model_name):
         # Implementation for creating client
         ...

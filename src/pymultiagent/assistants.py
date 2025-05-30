@@ -7,10 +7,14 @@ and wraps around the OpenAI Agent class.
 import os
 import asyncio
 
-# Import directly for better patching in tests
-from agents import Agent, Runner
-# Import directly for better patching in tests
-from backends import get_chat_model
+try:
+    # Try importing as relative modules (when imported as a package)
+    from agents import Agent, Runner
+    from .backends import get_chat_model
+except ImportError:
+    # Try absolute imports (when run directly)
+    from agents import Agent, Runner
+    from backends import get_chat_model
 
 
 class Assistant:
