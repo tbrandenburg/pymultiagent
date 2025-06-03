@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Dict, List
 import os
+import logging
 
 from agents import OpenAIChatCompletionsModel
 from openai import AsyncOpenAI, AsyncAzureOpenAI
+
+# Get module logger
+logger = logging.getLogger(__name__)
 
 class Backend(ABC):
     """Abstract base class for LLM backends."""
@@ -22,10 +26,12 @@ class Backend(ABC):
     def add_model(self, model_name: str, model_config: Optional[Dict[str, Any]] = None):
         """Add a supported model to this backend."""
         self.models[model_name] = model_config or {}
+        logger.info(f"Added model '{model_name}' to backend '{self.backend_type}'")
         return self
 
     def get_chat_model(self, model_name: str):
         """Get a chat model instance for a specific model."""
+        logger.debug(f"Getting chat model for '{model_name}' from backend '{self.backend_type}'")
         client = self.create_client(model_name)
         if client:
             return OpenAIChatCompletionsModel(openai_client=client, model=model_name)
@@ -86,6 +92,8 @@ class OpenAIBackend(Backend):
 
     def __init__(self):
         super().__init__("openai")
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        logger.info("Initialized OpenAI backend")
         self.api_key: Optional[str] = None
         self.endpoint: Optional[str] = None  # Optional, as OpenAI usually uses the default endpoint
 

@@ -13,3 +13,4 @@ python-dotenv
 requests
 pillow
 cairosvg
+python-telegram-bot>=20.0

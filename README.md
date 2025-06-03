@@ -86,6 +86,10 @@ LLAMA_OPENAI_ENDPOINT=your_llama_endpoint
 
 # Web Search (for knowledge assistant)
 SERPER_API_KEY=your_serper_api_key
+
+# Telegram Interface
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token  # Required for telegram interface
+TELEGRAM_ALLOWED_USERS=123456789,987654321  # Comma-separated list of allowed user IDs (optional)
 ```
 
 The system will first look for a `.env` file in your current working directory, and then fall back to the package installation directory if none is found.
@@ -156,6 +160,9 @@ pymultiagent --backend azure --model gpt-4o
 
 # Run test cases before interactive mode
 pymultiagent --tests
+
+# Use Telegram interface (requires TELEGRAM_BOT_TOKEN in .env file)
+pymultiagent --interface telegram
 ```
 
 #### Option 2: Using Python Module
@@ -171,6 +178,9 @@ python -m pymultiagent --backend azure --model gpt-4o --max_turns 20
 
 # Run test cases
 python -m pymultiagent --tests
+
+# Use Telegram interface (requires TELEGRAM_BOT_TOKEN in .env file)
+python -m pymultiagent --interface telegram
 ```
 
 #### Option 3: Using UV Run (No virtual environment activation needed)
@@ -186,6 +196,9 @@ uv run python -m pymultiagent -- --backend azure --model gpt-4o
 
 # Run test cases
 uv run python -m pymultiagent -- --tests
+
+# Use Telegram interface (requires TELEGRAM_BOT_TOKEN in .env file)
+uv run python -m pymultiagent -- --interface telegram
 ```
 
 **Note**: When passing arguments with `uv run`, you must use a double dash (`--`) to separate the package name from its arguments.
@@ -198,14 +211,46 @@ uv run python -m pymultiagent -- --tests
 - `--max_turns`: Maximum number of turns for agent interaction
 - `--tests`: Run test cases before interactive mode
 - `--no-interactive`: Skip interactive mode
+- `--interface`: Choose the interface to use (cli, telegram)
 
 ### Interactive Chat
 
-In interactive mode, you can:
+#### CLI Interface
+
+In CLI interactive mode, you can:
 - Type natural language requests
 - Type `help` to see available commands
 - Type `clear` to clear chat history
 - Type `exit` to end the conversation
+
+#### Telegram Interface
+
+To use the Telegram interface:
+
+1. Install the required dependency:
+   ```bash
+   pip install -e .[telegram]
+   # or
+   pip install python-telegram-bot
+   ```
+
+2. Create a Telegram bot using [@BotFather](https://t.me/BotFather) and get a token
+
+3. Configure your Telegram token in your `.env` file:
+   ```
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   ```
+
+4. Optionally restrict access to specific users in your `.env` file:
+   ```
+   TELEGRAM_ALLOWED_USERS=123456789,987654321
+   ```
+
+In Telegram chat, you can:
+- Send natural language messages to the bot
+- Use the `/help` command to see available commands
+- Use the `/clear` command to clear chat history
+- Use the `/start` command to restart the bot
 
 ## Available Agents
 

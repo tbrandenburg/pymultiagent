@@ -22,6 +22,7 @@ setup(
         "requests",
         "pillow",
         "cairosvg",
+        "python-telegram-bot>=20.0",
     ],
     extras_require={
         "dev": [

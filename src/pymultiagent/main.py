@@ -8,11 +8,12 @@ handling date, time, and coding requests.
 import os
 import asyncio
 import argparse
+import logging
 from dotenv import load_dotenv
 
 from pymultiagent.backends import initialize_backend_types, configure_backends, Backends
 from pymultiagent.assistants import Assistant
-from pymultiagent.chat import CLIChat
+from pymultiagent.chat import CLIChat, TelegramChat
 from pymultiagent.tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
 from pymultiagent.tests import run_test_cases, format_separator_line
 
@@ -34,13 +35,28 @@ else:
     print("  - OPENAI_API_KEY: For OpenAI models")
     print("  - LLAMA_OPENAI_API_KEY: For Llama models")
     print("  - SERPER_API_KEY: For web search functionality")
+    print("  - TELEGRAM_BOT_TOKEN: For Telegram interface")
+    print("  - TELEGRAM_ALLOWED_USERS: Comma-separated list of allowed Telegram user IDs (optional)")
     print("Create a .env file with these keys to enable all features.")
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("pymultiagent.log", encoding="utf-8"),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Initialize the backend types (client classes only)
 initialize_backend_types()
+logger.info("Backend types initialized")
 
 # Configure backends with API keys, endpoints, and models
 configure_backends()
+logger.info("Backends configured")
 
 
 # --- Agent Creation ---
@@ -70,6 +86,7 @@ Examples:
   %(prog)s --backend azure --model gpt-4o --max_turns 20
   %(prog)s --backend llama --model llama3.3 --tests
   %(prog)s --tests --no-interactive
+  %(prog)s --interface telegram --telegram-token YOUR_TOKEN
         """
     )
 
@@ -108,7 +125,28 @@ Examples:
         help="Skip interactive mode"
     )
 
+    parser.add_argument(
+        "--interface",
+        choices=["cli", "telegram"],
+        default="cli",
+        help="Interface to use for interaction (default: %(default)s)"
+    )
+
     args = parser.parse_args()
+
+    # Get Telegram token from .env file
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+    # Parse the telegram allowed users from environment variable
+    telegram_allowed_users = None
+    if os.getenv("TELEGRAM_ALLOWED_USERS") is not None:
+        # Parse from environment variable
+        telegram_allowed_users_env = os.getenv("TELEGRAM_ALLOWED_USERS")
+        if telegram_allowed_users_env:  # Check if not empty string
+            try:
+                telegram_allowed_users = [int(user_id.strip()) for user_id in telegram_allowed_users_env.split(",") if user_id.strip()]
+            except ValueError as e:
+                print(f"Warning: Invalid Telegram user ID in environment variable: {str(e)}. All IDs must be integers.")
 
     # Convert to dictionary format for backward compatibility
     config = {
@@ -116,12 +154,19 @@ Examples:
         "model": args.model,
         "max_turns": args.max_turns,
         "interactive": not args.no_interactive,
-        "run_tests": args.tests
+        "run_tests": args.tests,
+        "interface": args.interface,
+        "telegram_token": telegram_token,
+        "telegram_allowed_users": telegram_allowed_users
     }
 
     # Validate backend and model configuration
     backend = config["backend"]
     model_name = config["model"]
+
+    # Validate interface configuration
+    if config["interface"] == "telegram" and not config["telegram_token"]:
+        parser.error("Telegram token is required when using the telegram interface. Please set TELEGRAM_BOT_TOKEN in your .env file.")
 
     if backend not in Backends.get_registered_types():
         raise ValueError(f"Unsupported backend: {backend}")
@@ -169,11 +214,13 @@ async def main():
     """
     # Parse command line arguments
     args = parse_command_line_args()
+    logger.info(f"Command line arguments: {args}")
 
     try:
         # Get backend and model configuration
         backend = args["backend"]
         model_name = args["model"]
+        logger.info(f"Using backend: {backend}, model: {model_name}")
 
         # Create specialized assistants
         date_assistant = Assistant(
@@ -266,18 +313,38 @@ async def main():
         # Print summary of available agents
         print(f"\n--- Agent System initialized with backend '{backend}' and model '{model_name}' ---")
         print("\n" + format_separator_line() + "\n")
+        logger.info(f"Agent system initialized with backend '{backend}' and model '{model_name}'")
 
         # Run test cases if requested
         # Run tests or interactive mode
         if args["run_tests"]:
+            logger.info("Running test cases")
             await run_test_cases(triage_assistant)
+            logger.info("Test cases completed")
 
         # Run interactive chat if requested, passing max_turns
         if args["interactive"]:
-            cli_chat = CLIChat(triage_assistant, max_turns=args["max_turns"])
-            await cli_chat.run()
+            chat = None
+            if args["interface"] == "cli":
+                logger.info("Starting CLI interface")
+                chat = CLIChat(triage_assistant, max_turns=args["max_turns"])
+            elif args["interface"] == "telegram":
+                logger.info("Starting Telegram interface")
+                verify_ssl = args.get("verify_ssl", True)
+                if not verify_ssl:
+                    logger.warning("SSL certificate verification is disabled. This is insecure!")
+                chat = TelegramChat(
+                    triage_assistant,
+                    token=args["telegram_token"],
+                    max_turns=args["max_turns"],
+                    allowed_user_ids=args["telegram_allowed_users"] or []
+                )
+            if chat:
+                await chat.run()
+                logger.info(f"{args['interface'].upper()} interface terminated")
 
     except Exception as e:
+        logger.exception(f"Error in main function: {e}")
         print(f"Error: {e}")
         return 1
 
@@ -288,7 +355,14 @@ def cli_main():
     Command-line interface entry point.
     This function is the entry point for the 'pymultiagent' command.
     """
-    return asyncio.run(main())
+    try:
+        logger.info("Starting PyMultiAgent")
+        return asyncio.run(main())
+    except Exception as e:
+        logger.exception(f"Unhandled exception in PyMultiAgent: {e}")
+        return 1
+    finally:
+        logger.info("PyMultiAgent terminated")
 
 if __name__ == "__main__":
     cli_main()
