@@ -48,6 +48,11 @@ logging.basicConfig(
         logging.FileHandler("pymultiagent.log", encoding="utf-8"),
     ]
 )
+# Set HTTP-related and external library loggers to WARNING level to reduce API call logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Initialize the backend types (client classes only)
@@ -340,8 +345,14 @@ async def main():
                     allowed_user_ids=args["telegram_allowed_users"] or []
                 )
             if chat:
-                await chat.run()
-                logger.info(f"{args['interface'].upper()} interface terminated")
+                try:
+                    await chat.run()
+                except KeyboardInterrupt:
+                    logger.info("Keyboard interrupt received, shutting down...")
+                except Exception as e:
+                    logger.error(f"Error in interface: {e}")
+                finally:
+                    logger.info(f"{args['interface'].upper()} interface terminated")
 
     except Exception as e:
         logger.exception(f"Error in main function: {e}")
@@ -357,7 +368,12 @@ def cli_main():
     """
     try:
         logger.info("Starting PyMultiAgent")
-        return asyncio.run(main())
+        # Handle keyboard interrupts at this level to avoid traceback output
+        try:
+            return asyncio.run(main())
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received, shutting down gracefully...")
+            return 0
     except Exception as e:
         logger.exception(f"Unhandled exception in PyMultiAgent: {e}")
         return 1

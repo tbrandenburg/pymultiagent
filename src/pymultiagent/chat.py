@@ -7,17 +7,20 @@ for interacting with assistants.
 from abc import ABC, abstractmethod
 import asyncio
 import logging
-import os
-import ssl
-from typing import Dict, Optional, List, Any, Union
+from typing import Dict, List, Any
 from openai.types.responses import ResponseTextDeltaEvent, ResponseFunctionToolCall
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from telegram import Chat as TGChat
 from telegram.request import HTTPXRequest
+from telegram.constants import ParseMode
 
 # Get module logger
 logger = logging.getLogger(__name__)
+
+# Set HTTPX and telegram.ext loggers to WARNING level to reduce API call logging
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 # Define a function to extract text from message items
 def extract_message_text(item):
@@ -257,14 +260,14 @@ class TelegramChat(AbstractChat):
 
         # Setup bot with SSL verification settings
         application_builder = Application.builder().token(self.token)
-        
+
         # Configure SSL verification
         if not self.verify_ssl:
             logger.warning("SSL certificate verification is disabled. This is insecure!")
             # Create a custom request with SSL verification disabled
             request = HTTPXRequest(connection_pool_size=256, httpx_kwargs={"verify": False})
             application_builder = application_builder.request(request)
-        
+
         # Setup bot handlers
         self.application = application_builder.build()
 
@@ -274,13 +277,50 @@ class TelegramChat(AbstractChat):
         self.application.add_handler(CommandHandler("clear", self._clear_command))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_message))
 
-        # Start the bot
+        # Start the bot in a proper async way
         logger.info("Starting Telegram bot...")
-        print(f"Starting Telegram bot...")
-        await self.application.initialize()
-        await self.application.start()
-        # run_polling() should not be awaited as it returns None
-        self.application.run_polling()
+
+        try:
+            # Initialize the application (doesn't start the event loop)
+            await self.application.initialize()
+
+            # Start the application - this just prepares it but doesn't fetch updates
+            await self.application.start()
+
+            # Now start the updater to actually fetch updates from Telegram
+            # We need to explicitly start the updater to get messages
+            if not self.application.updater:
+                logger.error("Updater not available. Cannot start polling.")
+                return
+
+            # Start polling for updates - this is what actually connects to Telegram
+            await self.application.updater.start_polling(
+                allowed_updates=["message", "edited_message", "callback_query", "chat_member"],
+                drop_pending_updates=True,  # Ignore any updates that occurred while the bot was offline
+                poll_interval=2.0,  # Reduce polling frequency to minimize logs and API calls
+                timeout=10  # Longer timeout for long polling
+            )
+            logger.info("Telegram bot successfully started and is polling for updates")
+
+            # Keep the bot running until stopped externally
+            # Use asyncio.Event as a simple way to keep the coroutine running
+            stop_event = asyncio.Event()
+            try:
+                # Wait indefinitely for an event that never gets set
+                await stop_event.wait()
+            except asyncio.CancelledError:
+                # Handle graceful shutdown if the coroutine is cancelled
+                logger.info("Telegram bot stopping due to cancellation...")
+            finally:
+                # Clean up when exiting - stop updater first, then the application
+                logger.info("Telegram bot stopping and shutting down...")
+                if self.application.updater:
+                    await self.application.updater.stop()
+                await self.application.stop()
+                await self.application.shutdown()
+        except Exception as e:
+            logger.error(f"Error in Telegram bot: {e}")
+            raise
 
     async def _start_command(self, update: 'Any', context: 'Any'):
         """
@@ -294,7 +334,7 @@ class TelegramChat(AbstractChat):
 
         # Check if user is allowed to use the bot
         if self.allowed_user_ids and user_id not in self.allowed_user_ids:
-            await update.message.reply_text("You are not authorized to use this bot.")
+            await update.message.reply_text("You are not authorized to use this bot.", parse_mode=None)
             return await asyncio.sleep(0)  # Return an awaitable
 
         # Initialize user session if not exists
@@ -307,7 +347,8 @@ class TelegramChat(AbstractChat):
             "Available commands:\n"
             "/help - Show this help message\n"
             "/clear - Clear your chat history\n\n"
-            "Just send me a message to get started!"
+            "Just send me a message to get started!",
+            parse_mode="Markdown"
         )
         return await asyncio.sleep(0)  # Return an awaitable
 
@@ -324,7 +365,8 @@ class TelegramChat(AbstractChat):
             "/start - Start or restart the bot\n"
             "/help - Show this help message\n"
             "/clear - Clear your chat history\n\n"
-            "Just send me a message to get started!"
+            "Just send me a message to get started!",
+            parse_mode="Markdown"
         )
         return await asyncio.sleep(0)  # Return an awaitable
 
@@ -340,12 +382,12 @@ class TelegramChat(AbstractChat):
 
         # Check if user is allowed to use the bot
         if self.allowed_user_ids and user_id not in self.allowed_user_ids:
-            await update.message.reply_text("You are not authorized to use this bot.")
+            await update.message.reply_text("You are not authorized to use this bot.", parse_mode=None)
             return await asyncio.sleep(0)  # Return an awaitable
 
         # Clear user session
         self.user_sessions[user_id] = []
-        await update.message.reply_text("Chat history cleared.")
+        await update.message.reply_text("Chat history cleared.", parse_mode="Markdown")
         return await asyncio.sleep(0)  # Return an awaitable
 
     async def _handle_message(self, update: 'Any', context: 'Any'):
@@ -359,6 +401,8 @@ class TelegramChat(AbstractChat):
         user_id = update.effective_user.id
         user_message = update.message.text
 
+        logger.debug(f"{user_id}: {user_message}")
+
         # Check if user is allowed to use the bot
         if self.allowed_user_ids and user_id not in self.allowed_user_ids:
             await update.message.reply_text("You are not authorized to use this bot.")
@@ -370,7 +414,7 @@ class TelegramChat(AbstractChat):
 
         # Check if a request is already active for this user
         if user_id in self.active_requests and not self.active_requests[user_id].done():
-            await update.message.reply_text("I'm still processing your previous request. Please wait a moment.")
+            await update.message.reply_text("I'm still processing your previous request. Please wait a moment.", parse_mode=None)
             return await asyncio.sleep(0)  # Return an awaitable
 
         # Add user message to chat history
@@ -403,20 +447,100 @@ class TelegramChat(AbstractChat):
             # Add assistant response to chat history
             self.user_sessions[user_id].append({"role": "assistant", "content": response_text})
 
-            # Send the response in chunks if it's too long
+            # Process code blocks for proper Markdown formatting in Telegram
+            # Telegram uses different markdown syntax than the standard markdown
+            response_text = self._prepare_telegram_markdown(response_text)
+
+            # Send the response in chunks if it's too long, using Markdown formatting
             MAX_LENGTH = 4096
             for i in range(0, len(response_text), MAX_LENGTH):
                 chunk = response_text[i:i + MAX_LENGTH]
-                await update.message.reply_text(chunk)
+                await update.message.reply_text(
+                    chunk,
+                    parse_mode=ParseMode.MARKDOWN_V2
+                )
 
         except Exception as e:
             error_message = str(e)
             logger.exception(f"Error processing Telegram request: {error_message}")
-            await update.message.reply_text(f"Error processing your request: {error_message}")
+            await update.message.reply_text(f"Error processing your request: {error_message}", parse_mode=None)
 
             # Remove the last user message if there was an error
             if self.user_sessions[user_id]:
                 self.user_sessions[user_id].pop()
+
+    def _prepare_telegram_markdown(self, text):
+        """
+        Prepare text for Telegram's MarkdownV2 format.
+
+        Telegram's MarkdownV2 requires escaping of special characters.
+        This function ensures that formatting works correctly in Telegram.
+
+        Args:
+            text: The text to prepare
+
+        Returns:
+            Properly formatted text for Telegram MarkdownV2
+        """
+        # Replace triple backticks with single backticks for code blocks
+        # Telegram doesn't support language specification or path specification in code blocks
+        import re
+
+        # First, handle code blocks with path specification
+        # Pattern matches ```path/to/file.ext#L123-456 ... ``` format
+        path_code_pattern = r"```([^\n]+?#L\d+-\d+)\n(.*?)```"
+        text = re.sub(path_code_pattern, r"*File: \1*\n`\2`", text, flags=re.DOTALL)
+
+        # Then handle regular code blocks
+        code_block_pattern = r"```(?:[a-zA-Z]*\n)?(.*?)```"
+        text = re.sub(code_block_pattern, r"`\1`", text, flags=re.DOTALL)
+
+        # Split the text into parts where code blocks (content between backticks) are separated
+        parts = []
+        current_pos = 0
+
+        # Find all code blocks (text between backticks)
+        for match in re.finditer(r'`(.*?)`', text, flags=re.DOTALL):
+            # Add the text before the code block (with escaping)
+            if match.start() > current_pos:
+                normal_text = text[current_pos:match.start()]
+                # Escape special characters in normal text
+                normal_text = self._escape_markdown_v2_chars(normal_text)
+                parts.append(normal_text)
+
+            # Add the code block (without escaping inside it)
+            code_block = text[match.start():match.end()]
+            parts.append(code_block)
+            current_pos = match.end()
+
+        # Add any remaining text after the last code block
+        if current_pos < len(text):
+            remaining_text = text[current_pos:]
+            remaining_text = self._escape_markdown_v2_chars(remaining_text)
+            parts.append(remaining_text)
+
+        text = ''.join(parts)
+
+        return text
+
+    def _escape_markdown_v2_chars(self, text):
+        """
+        Escape special characters for MarkdownV2 format.
+
+        Args:
+            text: Text to escape
+
+        Returns:
+            Text with special characters escaped
+        """
+        # Characters that need to be escaped in MarkdownV2
+        special_chars = '_*[]()~`>#+-=|{}.!'
+
+        # Escape each special character with a backslash
+        for char in special_chars:
+            text = text.replace(char, '\\' + char)
+
+        return text
 
     async def _get_assistant_response(self):
         """
