@@ -3,7 +3,8 @@
 PyMultiAgent - A multi-agent system for handling different types of requests.
 
 This module defines a system with a triage agent and specialized agents for
-handling date, time, and coding requests.
+handling various types of requests such as date, time, coding, knowledge,
+writing, and math tasks.
 """
 import os
 import asyncio
@@ -12,8 +13,8 @@ import logging
 from dotenv import load_dotenv
 
 from pymultiagent.backends import initialize_backend_types, configure_backends, Backends
-from pymultiagent.assistants import Assistant
-from pymultiagent.chat import CLIChat, TelegramChat
+from pymultiagent.agents import AgentManager, Agent
+from pymultiagent.chat import CLIChat, TelegramChat, process_chat_history
 from pymultiagent.tools import get_current_date, get_current_time, read_file, read_file_lines, write_file, execute_shell_command, search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content, check_directory_exists, check_file_exists, get_current_working_directory, get_directory_tree, grep_files, svg_text_to_png
 from pymultiagent.tests import run_test_cases, format_separator_line
 
@@ -40,14 +41,22 @@ else:
     print("Create a .env file with these keys to enable all features.")
 
 # Configure logging
+# File handler gets everything including tracebacks
+file_handler = logging.FileHandler("pymultiagent.log", encoding="utf-8")
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+# Console handler gets clean messages without tracebacks
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+
+# Configure root logger
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("pymultiagent.log", encoding="utf-8"),
-    ]
+    handlers=[console_handler, file_handler]
 )
+
 # Set HTTP-related and external library loggers to WARNING level to reduce API call logging
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
@@ -55,7 +64,7 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Initialize the backend types (client classes only)
+# Initialize and configure backends (compatibility functions)
 initialize_backend_types()
 logger.info("Backend types initialized")
 
@@ -63,12 +72,81 @@ logger.info("Backend types initialized")
 configure_backends()
 logger.info("Backends configured")
 
-
-# --- Agent Creation ---
-
-# The create_custom_agent function is now imported from assistants.py
-
 # --- Utility Functions ---
+
+def format_user_friendly_error(error):
+    """
+    Format an error message in a user-friendly way.
+
+    Args:
+        error: The exception object
+
+    Returns:
+        str: A formatted error message
+    """
+    error_type = type(error).__name__
+    error_msg = str(error)
+
+    # Handle known error types with custom messages
+    if "Azure backend not fully configured" in error_msg:
+        return (
+            "Configuration Error: Azure OpenAI credentials are missing.\n\n"
+            "Please set the following environment variables in your .env file:\n"
+            "  AZURE_OPENAI_API_KEY=your_api_key\n"
+            "  AZURE_OPENAI_ENDPOINT=your_endpoint_url\n\n"
+            "You can also use '--backend openai' if you have OpenAI credentials configured."
+        )
+    elif "OpenAI backend not fully configured" in error_msg:
+        return (
+            "Configuration Error: OpenAI credentials are missing.\n\n"
+            "Please set the following environment variable in your .env file:\n"
+            "  OPENAI_API_KEY=your_api_key\n\n"
+            "You can also use '--backend llama' if you have a local Llama model running with OpenAI-compatible API."
+        )
+    elif "Llama backend not fully configured" in error_msg:
+        return (
+            "Configuration Error: Llama model API credentials are missing.\n\n"
+            "Please set the following environment variables in your .env file:\n"
+            "  LLAMA_OPENAI_API_KEY=your_api_key\n"
+            "  LLAMA_OPENAI_ENDPOINT=your_endpoint_url\n\n"
+            "You can also use '--backend azure' or '--backend openai' if you have those credentials configured."
+        )
+    elif "Model" in error_msg and "not registered" in error_msg:
+        return (
+            f"Configuration Error: {error_msg}\n\n"
+            "Please check that you specified a valid model for the selected backend.\n"
+            "Use --help to see available models for each backend."
+        )
+    elif "Unsupported backend" in error_msg:
+        return (
+            f"Configuration Error: {error_msg}\n\n"
+            "Please check that you specified a valid backend.\n"
+            "Use --help to see available backends."
+        )
+    elif "Backend" in error_msg and "not registered" in error_msg:
+        return (
+            f"Configuration Error: {error_msg}\n\n"
+            "Please check that you specified a valid backend.\n"
+            "Use --help to see available backends."
+        )
+    elif "TELEGRAM_BOT_TOKEN" in error_msg:
+        return (
+            "Configuration Error: Telegram bot token is missing.\n\n"
+            "Please set the following environment variable in your .env file:\n"
+            "  TELEGRAM_BOT_TOKEN=your_bot_token\n\n"
+            "Or pass it as a command line argument with --telegram-token"
+        )
+    elif "You cannot use the Telegram interface" in error_msg:
+        return (
+            "Configuration Error: Telegram interface cannot be used.\n\n"
+            + error_msg
+        )
+    elif "KeyboardInterrupt" in error_type:
+        return "Operation cancelled by user."
+
+    # Default message for unknown errors
+    return f"Error: {error_msg}\n\nType: {error_type}"
+
 
 def parse_command_line_args():
     """
@@ -96,7 +174,7 @@ Examples:
     )
 
     # Get available backends and models for help text
-    available_backends = Backends.get_registered_types()
+    available_backends = Backends.get_backend_types()
 
     parser.add_argument(
         "--backend",
@@ -173,10 +251,10 @@ Examples:
     if config["interface"] == "telegram" and not config["telegram_token"]:
         parser.error("Telegram token is required when using the telegram interface. Please set TELEGRAM_BOT_TOKEN in your .env file.")
 
-    if backend not in Backends.get_registered_types():
+    if backend not in Backends.get_backend_types():
         raise ValueError(f"Unsupported backend: {backend}")
 
-    backend_instance = Backends.get(backend)
+    backend_instance = Backends.get_backend(backend)
     available_models = backend_instance.get_models()
 
     if model_name not in available_models and available_models:
@@ -187,23 +265,156 @@ Examples:
 
     return config
 
-def process_chat_history(chat_history, new_response):
+# --- Agent Creation Functions ---
+
+def create_specialized_agents(backend="azure", model_name="gpt-4o-mini"):
     """
-    Update chat history with a new response.
+    Create all specialized agents and return them in a dictionary.
 
     Args:
-        chat_history (list): Existing chat history
-        new_response: New response to add to history
+        backend (str): The backend to use (azure, openai, llama)
+        model_name (str): The model name to use for the agents
 
     Returns:
-        list: Updated chat history
+        dict: Dictionary of specialized agents
     """
-    return chat_history + new_response.to_input_list()
+    from pymultiagent.tools.function_tools import (
+        get_current_date, get_current_time,
+        read_file, write_file, check_directory_exists, check_file_exists,
+        get_current_working_directory, execute_shell_command, get_directory_tree,
+        grep_files, search_wikipedia, fetch_wikipedia_content, search_web_serper,
+        fetch_http_url_content,
+    )
 
+    logger.info("Creating specialized agents")
+    agents = {}
 
+    # Date Agent
+    agents["date"] = Agent(
+        name="Date Agent",
+        instructions=(
+            "You are a helpful date agent. Be concise and professional. "
+            "You must use the 'get_current_date' tool to obtain the date. Do not attempt to provide the date without using the tool."
+        ),
+        backend=backend,
+        model_name=model_name,
+        tools=[get_current_date],
+    )
 
-# --- Interactive Chat ---
-# The interactive chat functionality is now provided by the CLIChat class in chat.py
+    # Time Agent
+    agents["time"] = Agent(
+        name="Time Agent",
+        instructions=(
+            "You are a helpful time agent. Be concise and professional. "
+            "You must use the 'get_current_time' tool to obtain the time. Do not attempt to provide the time without using the tool."
+        ),
+        backend=backend,
+        model_name=model_name,
+        tools=[get_current_time],
+    )
+
+    # Code Agent
+    agents["code"] = Agent(
+        name="Coder Agent",
+        instructions="prompts/coder_prompt.txt",
+        backend=backend,
+        model_name=model_name,
+        tools=[
+            read_file,
+            write_file,
+            check_directory_exists,
+            check_file_exists,
+            get_current_working_directory,
+            execute_shell_command,
+            get_directory_tree,
+            grep_files,
+        ],
+    )
+
+    # Knowledge Agent
+    agents["knowledge"] = Agent(
+        name="Knowledge Agent",
+        instructions=(
+            "You are a helpful knowledge agent. You are highly knowledgeable across a wide range of topics and disciplines."
+            "You take care to provide information that is understandable, accurate, thorough, and reliable."
+            "When providing common knowledge, you augment it with current information based on latest research and news."
+            "You have access to tools to assist you."
+            "When answering questions, follow these steps:"
+            "1. **Get information:** Search for and gather comprehensive background information about the topic using Wikipedia and other reliable sources."
+            "2. **Get latest news:** Use web search tools to find the most recent news or updates related to the topic."
+            "3. **Summarize and explain:** Provide a clear, concise answer, and briefly explain your reasoning or summarize the key points to ensure clarity and understanding."
+            "Use the available tools as needed to ensure your answers are accurate and up to date."
+        ),
+        backend=backend,
+        model_name=model_name,
+        tools=[
+            search_wikipedia,
+            fetch_wikipedia_content,
+            search_web_serper,
+            fetch_http_url_content,
+        ],
+    )
+
+    # Writing Agent
+    agents["writing"] = Agent(
+        name="Writing Agent",
+        instructions=(
+            "You are a professional writing agent. You excel at creating clear, engaging, and error-free text."
+            "You can help with essays, articles, blog posts, emails, and other written content."
+            "You provide thoughtful suggestions for improving clarity, flow, and style."
+        ),
+        backend=backend,
+        model_name=model_name,
+        tools=[],
+    )
+
+    # Math Agent
+    agents["math"] = Agent(
+        name="Math Agent",
+        instructions=(
+            "You are a specialized mathematics agent. You can help with calculations, "
+            "mathematical proofs, and explaining mathematical concepts in an accessible way. "
+            "Always show your work step by step when solving problems."
+        ),
+        backend=backend,
+        model_name=model_name,
+        tools=[],
+    )
+
+    logger.info(f"Created {len(agents)} specialized agents")
+    return agents
+
+def create_triage_agent(backend="azure", model_name="gpt-4o-mini", specialized_agents=None):
+    """
+    Create a triage agent that can hand off to specialized agents.
+
+    Args:
+        backend (str): The backend to use (azure, openai, llama)
+        model_name (str): The model name to use for the agent
+        specialized_agents (dict): Dictionary of specialized agents for handoffs
+
+    Returns:
+        Assistant: The configured triage agent
+    """
+    if not specialized_agents:
+        specialized_agents = {}
+        logger.warning("No specialized agents provided to triage agent")
+
+    logger.info("Creating triage agent directly")
+    triage_agent = Agent(
+        name="Triage Agent",
+        instructions=(
+            "You are a general-purpose Triage Agent. Your primary role is to understand the user's intent "
+            "and route their request to the most appropriate specialized agent. "
+            "Be concise and professional. Do not answer questions that specialized agents can handle, always hand off."
+        ),
+        backend=backend,
+        model_name=model_name,
+        handoffs=list(specialized_agents.values()),
+    )
+    logger.info("Triage agent created successfully")
+
+    return triage_agent
 
 # --- Main Function ---
 
@@ -227,96 +438,32 @@ async def main():
         model_name = args["model"]
         logger.info(f"Using backend: {backend}, model: {model_name}")
 
-        # Create specialized assistants
-        date_assistant = Assistant(
-            name="Date Assistant",
-            instructions=(
-                "You are a helpful date assistant. Be concise and professional. "
-                "You must use the 'get_current_date' tool to obtain the date. Do not attempt to provide the date without using the tool."
-            ),
+        # Create specialized agents
+        specialized_agents = create_specialized_agents(backend=backend, model_name=model_name)
+
+        # Create triage agent directly instead of through AgentManager
+        triage_agent = create_triage_agent(
             backend=backend,
             model_name=model_name,
-            tools=[get_current_date]
+            specialized_agents=specialized_agents
         )
 
-        time_assistant = Assistant(
-            name="Time Assistant",
-            instructions=(
-                "You are a helpful time assistant. Be concise and professional. "
-                "You must use the 'get_current_time' tool to obtain the time. Do not attempt to provide the time without using the tool."
-            ),
-            backend=backend,
-            model_name=model_name,
-            tools=[get_current_time]
-        )
+        # Initialize the AgentManager with command line arguments and add agents
+        agent_manager = AgentManager(backend=backend, model_name=model_name)
 
-        code_assistant = Assistant(
-            name="Coder Assistant",
-            instructions="prompts/coder_prompt.txt",
-            backend=backend,
-            model_name=model_name,
-            tools=[read_file, read_file_lines, write_file, check_directory_exists, check_file_exists, get_current_working_directory, execute_shell_command, get_directory_tree, grep_files, svg_text_to_png]
-        )
+        # Add all specialized agents to the manager
+        for agent_key, agent in specialized_agents.items():
+            agent_manager.add_agent(agent_key, agent)
 
-        knowledge_assistant = Assistant(
-            name="Knowledge Assistant",
-            instructions=(
-                "You are a helpful knowledge assistant. You are highly knowledgeable across a wide range of topics and disciplines."
-                "You take care to provide information that is understandable, accurate, thorough, and reliable."
-                "When providing common knowledge, you augment it with current information based on latest research and news."
-                "You have access to tools to assist you."
-                "When answering questions, follow these steps:"
-                "1. **Get information:** Search for and gather comprehensive background information about the topic using Wikipedia and other reliable sources."
-                "2. **Get latest news:** Use web search tools to find the most recent news or updates related to the topic."
-                "3. **Summarize and explain:** Provide a clear, concise answer, and briefly explain your reasoning or summarize the key points to ensure clarity and understanding."
-                "Use the available tools as needed to ensure your answers are accurate and up to date."
-            ),
-            backend=backend,
-            model_name=model_name,
-            tools=[search_wikipedia, fetch_wikipedia_content, search_web_serper, fetch_http_url_content]
-        )
-
-        writing_assistant = Assistant(
-            name="Writing Assistant",
-            instructions=(
-                "You are a professional writing assistant. You excel at creating clear, engaging, and error-free text."
-                "You can help with essays, articles, blog posts, emails, and other written content."
-                "You provide thoughtful suggestions for improving clarity, flow, and style."
-            ),
-            backend=backend,
-            model_name=model_name,
-            tools=[]  # No specialized tools for this example
-        )
-
-        math_assistant = Assistant(
-            name="Math Assistant",
-            instructions=(
-                "You are a specialized mathematics assistant. You can help with calculations, "
-                "mathematical proofs, and explaining mathematical concepts in an accessible way. "
-                "Always show your work step by step when solving problems."
-            ),
-            backend=backend,
-            model_name=model_name,
-            tools=[]  # No specialized tools for this example
-        )
-
-        # Create triage assistant with handoffs to other assistants
-        # The internal agents are created automatically during initialization
-        triage_assistant = Assistant(
-            name="Triage Agent",
-            instructions=(
-                "You are a general-purpose Triage Agent. Your primary role is to understand the user's intent "
-                "and route their request to the most appropriate specialized assistant. "
-                "Be concise and professional. Do not answer questions that specialized assistants can handle, always hand off."
-            ),
-            backend=backend,
-            model_name=model_name,
-            handoffs=[date_assistant, time_assistant, code_assistant,
-                     writing_assistant, math_assistant, knowledge_assistant]
-        )
+        # Get agent information
+        agent_info = {
+            "backend": backend,
+            "model": model_name,
+            "available_agents": list(specialized_agents.keys()),
+        }
 
         # Print summary of available agents
-        print(f"\n--- Agent System initialized with backend '{backend}' and model '{model_name}' ---")
+        print(f"\n--- Agent System initialized with backend '{agent_info['backend']}' and model '{agent_info['model']}' ---")
         print("\n" + format_separator_line() + "\n")
         logger.info(f"Agent system initialized with backend '{backend}' and model '{model_name}'")
 
@@ -324,7 +471,7 @@ async def main():
         # Run tests or interactive mode
         if args["run_tests"]:
             logger.info("Running test cases")
-            await run_test_cases(triage_assistant)
+            await run_test_cases(triage_agent)
             logger.info("Test cases completed")
 
         # Run interactive chat if requested, passing max_turns
@@ -332,14 +479,14 @@ async def main():
             chat = None
             if args["interface"] == "cli":
                 logger.info("Starting CLI interface")
-                chat = CLIChat(triage_assistant, max_turns=args["max_turns"])
+                chat = CLIChat(triage_agent, max_turns=args["max_turns"])
             elif args["interface"] == "telegram":
                 logger.info("Starting Telegram interface")
                 verify_ssl = args.get("verify_ssl", True)
                 if not verify_ssl:
                     logger.warning("SSL certificate verification is disabled. This is insecure!")
                 chat = TelegramChat(
-                    triage_assistant,
+                    triage_agent,
                     token=args["telegram_token"],
                     max_turns=args["max_turns"],
                     allowed_user_ids=args["telegram_allowed_users"] or []

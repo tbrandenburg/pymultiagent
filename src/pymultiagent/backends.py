@@ -1,307 +1,213 @@
-from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, List
+"""
+PyMultiAgent - Backend Management System
+
+This module provides the backend configuration and management system for the PyMultiAgent framework.
+It supports multiple LLM providers with a unified interface.
+"""
+
 import os
 import logging
+from typing import Dict, Any, Optional, List
 
-from agents import OpenAIChatCompletionsModel
-from openai import AsyncOpenAI, AsyncAzureOpenAI
+try:
+    from agents import OpenAIChatCompletionsModel
+    from openai import AsyncOpenAI, AsyncAzureOpenAI
+except ImportError:
+    raise ImportError(
+        "Required packages not found. Please install with 'pip install openai openai-agents'"
+    )
 
 # Get module logger
 logger = logging.getLogger(__name__)
 
-class Backend(ABC):
-    """Abstract base class for LLM backends."""
+# --- Backend Configuration ---
+
+BACKEND_CONFIGS = {
+    "llama": {
+        "client_class": AsyncOpenAI,
+        "api_key": os.getenv("LLAMA_OPENAI_API_KEY", "dummy"),
+        "endpoint": os.getenv("LLAMA_OPENAI_ENDPOINT", "http://localhost:8000/v1/"),
+        "models": {"llama3.2": {}, "llama3.3": {}},
+        "client_kwargs": lambda cfg, model: {
+            "api_key": cfg["api_key"],
+            "base_url": cfg["endpoint"],
+        },
+    },
+    "azure": {
+        "client_class": AsyncAzureOpenAI,
+        "api_key": os.getenv("AZURE_OPENAI_API_KEY", ""),
+        "endpoint": os.getenv(
+            "AZURE_OPENAI_ENDPOINT", "https://openaiapimanagementxcse.azure-api.net"
+        ),
+        "models": {
+            "gpt-4o": {"deployment": "gpt-4o", "api_version": "2025-01-01-preview"},
+            "gpt-4o-mini": {
+                "deployment": "gpt-4o-mini",
+                "api_version": "2025-01-01-preview",
+            },
+            "o3-mini": {"deployment": "o3-mini", "api_version": "2025-01-01-preview"},
+            "o4-mini": {"deployment": "o4-mini", "api_version": "2025-01-01-preview"},
+        },
+        "client_kwargs": lambda cfg, model: {
+            "api_key": cfg["api_key"],
+            "api_version": cfg["models"][model]["api_version"],
+            "azure_endpoint": cfg["endpoint"],
+            "azure_deployment": cfg["models"][model]["deployment"],
+            "default_headers": {
+                "Ocp-Apim-Subscription-Key": cfg["api_key"],
+                "api-key": cfg["api_key"],
+            },
+        },
+    },
+    "openai": {
+        "client_class": AsyncOpenAI,
+        "api_key": os.getenv("OPENAI_API_KEY", ""),
+        "endpoint": os.getenv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/"),
+        "models": {
+            "gpt-3.5-turbo": {},
+            "gpt-4": {},
+            "gpt-4-turbo": {},
+            "gpt-4o": {},
+            "gpt-4o-mini": {},
+            "o3-mini": {},
+            "o4-mini": {},
+        },
+        "client_kwargs": lambda cfg, model: {"api_key": cfg["api_key"]},
+    },
+}
+
+
+# --- Factory Functions ---
+
+def create_openai_client(backend: str, model_name: str):
+    """
+    Initializes the client for a given backend and model.
+
+    Args:
+        backend (str): The backend identifier (azure, openai, llama)
+        model_name (str): The name of the model to use
+
+    Returns:
+        Client: An initialized OpenAI client
+
+    Raises:
+        ValueError: If the backend or model is not supported
+    """
+    config = BACKEND_CONFIGS.get(backend)
+    if not config:
+        raise ValueError(f"Unsupported backend: {backend}")
+
+    if model_name not in config["models"]:
+        raise ValueError(f"Unsupported model '{model_name}' for backend '{backend}'")
+
+    client_class = config["client_class"]
+    client = client_class(**config["client_kwargs"](config, model_name))
+    return client
+
+
+def get_chat_model(backend: str = "azure", model_name: str = "o4-mini"):
+    """
+    Returns an OpenAIChatCompletionsModel using the selected backend and model.
+
+    Args:
+        backend (str): The backend to use (azure, openai, llama)
+        model_name (str): The model name to use
+
+    Returns:
+        OpenAIChatCompletionsModel: A configured chat model
+
+    Raises:
+        ValueError: If the backend or model is not supported
+    """
+    client = create_openai_client(backend, model_name)
+    return OpenAIChatCompletionsModel(openai_client=client, model=model_name)
+
+
+# --- Backend Class (for OOP compatibility) ---
+
+class Backend:
+    """Base class for LLM backends (for OOP compatibility)."""
 
     def __init__(self, backend_type: str):
         self.backend_type = backend_type
-        self.models: Dict[str, Dict[str, Any]] = {}
-
-    @abstractmethod
-    def create_client(self, model_name):
-        """Create a client for a specific model."""
-        # This method should return an AsyncOpenAI or AsyncAzureOpenAI client
-        # or raise an appropriate exception
-        raise NotImplementedError("Subclasses must implement this method")
-
-    def add_model(self, model_name: str, model_config: Optional[Dict[str, Any]] = None):
-        """Add a supported model to this backend."""
-        self.models[model_name] = model_config or {}
-        logger.info(f"Added model '{model_name}' to backend '{self.backend_type}'")
-        return self
+        self.config = BACKEND_CONFIGS.get(backend_type, {})
+        self.models = self.config.get("models", {})
 
     def get_chat_model(self, model_name: str):
-        """Get a chat model instance for a specific model."""
-        logger.debug(f"Getting chat model for '{model_name}' from backend '{self.backend_type}'")
-        client = self.create_client(model_name)
-        if client:
-            return OpenAIChatCompletionsModel(openai_client=client, model=model_name)
-        return None
+        """Get a chat model for this backend."""
+        return get_chat_model(self.backend_type, model_name)
 
     def get_models(self) -> List[str]:
         """Get all models registered for this backend."""
         return list(self.models.keys())
 
 
-class AzureBackend(Backend):
-    """Azure OpenAI backend implementation."""
-
-    def __init__(self):
-        super().__init__("azure")
-        self.api_key: Optional[str] = None
-        self.endpoint: Optional[str] = None
-
-    def configure(self, api_key: str, endpoint: str):
-        """Configure the Azure backend."""
-        self.api_key = api_key
-        self.endpoint = endpoint
-        return self
-
-    def create_client(self, model_name):
-        """Create an Azure OpenAI client for the specified model."""
-        if model_name not in self.models:
-            raise ValueError(f"Model {model_name} not registered for Azure backend")
-
-        if not self.api_key or not self.endpoint:
-            raise ValueError("Azure backend not fully configured: missing api_key or endpoint")
-
-        model_config = self.models[model_name]
-        api_version = model_config.get("api_version")
-        deployment = model_config.get("deployment")
-
-        if not api_version or not deployment:
-            raise ValueError(f"Model {model_name} configuration incomplete: missing api_version or deployment")
-
-        # Create headers dictionary with string keys and string values
-        headers = {
-            "Ocp-Apim-Subscription-Key": self.api_key,
-            "api-key": self.api_key
-        }
-
-        # type: ignore comments tell the type checker to ignore these lines
-        return AsyncAzureOpenAI(  # type: ignore
-            api_key=self.api_key,
-            api_version=api_version,
-            azure_endpoint=self.endpoint,
-            azure_deployment=deployment,
-            default_headers=headers
-        )
-
-
-class OpenAIBackend(Backend):
-    """OpenAI backend implementation."""
-
-    def __init__(self):
-        super().__init__("openai")
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        logger.info("Initialized OpenAI backend")
-        self.api_key: Optional[str] = None
-        self.endpoint: Optional[str] = None  # Optional, as OpenAI usually uses the default endpoint
-
-    def configure(self, api_key: str, endpoint: Optional[str] = None):
-        """Configure the OpenAI backend."""
-        self.api_key = api_key
-        self.endpoint = endpoint
-        return self
-
-    def create_client(self, model_name):
-        """Create an OpenAI client for the specified model."""
-        if model_name not in self.models:
-            raise ValueError(f"Model {model_name} not registered for OpenAI backend")
-
-        if not self.api_key:
-            raise ValueError("OpenAI backend not fully configured: missing api_key")
-
-        # Add base_url only if endpoint is specified
-        if self.endpoint:
-            return AsyncOpenAI(  # type: ignore
-                api_key=self.api_key,
-                base_url=self.endpoint
-            )
-        else:
-            return AsyncOpenAI(  # type: ignore
-                api_key=self.api_key
-            )
-
-
-class LlamaBackend(Backend):
-    """Llama backend implementation."""
-
-    def __init__(self):
-        super().__init__("llama")
-        self.api_key: Optional[str] = None
-        self.endpoint: Optional[str] = None
-
-    def configure(self, api_key: str, endpoint: str):
-        """Configure the Llama backend."""
-        self.api_key = api_key
-        self.endpoint = endpoint
-        return self
-
-    def create_client(self, model_name):
-        """Create a Llama client for the specified model."""
-        if model_name not in self.models:
-            raise ValueError(f"Model {model_name} not registered for Llama backend")
-
-        if not self.api_key or not self.endpoint:
-            raise ValueError("Llama backend not fully configured: missing api_key or endpoint")
-
-        return AsyncOpenAI(  # type: ignore
-            api_key=self.api_key,
-            base_url=self.endpoint
-        )
-
-
 class Backends:
-    """Registry for managing LLM backends."""
+    """Registry for accessing LLM backends."""
 
-    # Static storage for backends
-    _backends = {}
+    @staticmethod
+    def get_backend_types():
+        """Get all available backend types."""
+        return list(BACKEND_CONFIGS.keys())
 
-    @classmethod
-    def register(cls, backend):
-        """Register a backend instance."""
-        cls._backends[backend.backend_type] = backend
-        return backend
+    @staticmethod
+    def get_backend(backend_type: str) -> Backend:
+        """Get a backend instance by type."""
+        if backend_type not in BACKEND_CONFIGS:
+            raise ValueError(f"Unsupported backend: {backend_type}")
+        return Backend(backend_type)
 
-    @classmethod
-    def get(cls, backend_type):
-        """Get a registered backend by type."""
-        if backend_type not in cls._backends:
-            raise ValueError(f"Backend {backend_type} not registered")
-        return cls._backends[backend_type]
+    @staticmethod
+    def get_models_for_backend(backend_type: str) -> List[str]:
+        """Get all models available for a specific backend."""
+        config = BACKEND_CONFIGS.get(backend_type)
+        if not config:
+            raise ValueError(f"Unsupported backend: {backend_type}")
+        return list(config.get("models", {}).keys())
 
-    @classmethod
-    def get_all(cls):
-        """Get all registered backends."""
-        return cls._backends
+    @staticmethod
+    def validate_config(backend: str, model_name: str) -> bool:
+        """Validate that a backend and model configuration is valid."""
+        if backend not in BACKEND_CONFIGS:
+            return False
 
-    @classmethod
-    def get_registered_types(cls):
-        """Get all registered backend types."""
-        return list(cls._backends.keys())
+        config = BACKEND_CONFIGS[backend]
+        if model_name not in config.get("models", {}):
+            return False
 
-    @classmethod
-    def get_chat_model(cls, backend_type, model_name):
-        """Get a chat model instance for a specific backend and model."""
-        backend = cls.get(backend_type)
-        return backend.get_chat_model(model_name)
+        return True
 
-    @classmethod
-    def from_dict(cls, config_dict):
-        """
-        Configure backends from a dictionary similar to the current BACKEND_CONFIGS.
 
-        This is a helper method to maintain compatibility with the previous config format.
-        """
-        for backend_type, config in config_dict.items():
-            # Skip if backend type is not registered
-            if backend_type not in cls._backends:
-                continue
+# --- Backward Compatibility Functions ---
 
-            backend = cls.get(backend_type)
+def create_client_for_backend(backend: str, model_name: str):
+    """Create a client for a specific backend and model (compatibility function)."""
+    return create_openai_client(backend, model_name)
 
-            # Configure the backend (method will vary by backend type)
-            if backend_type == "azure":
-                backend.configure(
-                    config.get("api_key"),
-                    config.get("endpoint")
-                )
-            elif backend_type == "openai":
-                backend.configure(
-                    config.get("api_key"),
-                    config.get("endpoint")
-                )
-            elif backend_type == "llama":
-                backend.configure(
-                    config.get("api_key"),
-                    config.get("endpoint")
-                )
 
-            # Register models for this backend
-            for model_name, model_config in config.get("models", {}).items():
-                backend.add_model(model_name, model_config)
+def get_available_backends():
+    """Get list of available backends (compatibility function)."""
+    return Backends.get_backend_types()
 
-        return cls
+
+def get_available_models(backend: str):
+    """Get list of available models for a backend (compatibility function)."""
+    return Backends.get_models_for_backend(backend)
 
 
 def initialize_backend_types():
-    """Initialize the Backends registry with specialized backend instances."""
-    # Register Azure OpenAI backend
-    Backends.register(AzureBackend())
-
-    # Register OpenAI backend
-    Backends.register(OpenAIBackend())
-
-    # Register Llama backend
-    Backends.register(LlamaBackend())
+    """
+    Initialize the Backends registry with specialized backend instances.
+    This is a compatibility function for backward compatibility.
+    """
+    # No need to do anything as backends are now defined in BACKEND_CONFIGS
+    logger.info("Backend types initialized from BACKEND_CONFIGS")
 
 
 def configure_backends():
-    """Configure backends with runtime values."""
-    # Azure OpenAI
-    azure_backend = Backends.get("azure")
-    azure_backend.configure(
-        os.getenv("AZURE_OPENAI_API_KEY", ""),
-        os.getenv("AZURE_OPENAI_ENDPOINT", "https://openaiapimanagementxcse.azure-api.net")
-    )
-
-    # Add models to Azure
-    azure_backend.add_model("gpt-4o", {
-        "deployment": "gpt-4o",
-        "api_version": "2025-01-01-preview"
-    })
-    azure_backend.add_model("gpt-4o-mini", {
-        "deployment": "gpt-4o-mini",
-        "api_version": "2025-01-01-preview"
-    })
-    azure_backend.add_model("o3-mini", {
-        "deployment": "o3-mini",
-        "api_version": "2025-01-01-preview"
-    })
-    azure_backend.add_model("o4-mini", {
-        "deployment": "o4-mini",
-        "api_version": "2025-01-01-preview"
-    })
-
-    # OpenAI
-    openai_backend = Backends.get("openai")
-    openai_backend.configure(
-        os.getenv("OPENAI_API_KEY", ""),
-        os.getenv("OPENAI_API_ENDPOINT", "https://api.openai.com/v1/")
-    )
-
-    # Add models to OpenAI
-    openai_backend.add_model("gpt-3.5-turbo", {})
-    openai_backend.add_model("gpt-4", {})
-    openai_backend.add_model("gpt-4-turbo", {})
-    openai_backend.add_model("gpt-4o", {})
-    openai_backend.add_model("gpt-4o-mini", {})
-    openai_backend.add_model("o3-mini", {})
-    openai_backend.add_model("o4-mini", {})
-
-    # Llama
-    llama_backend = Backends.get("llama")
-    llama_backend.configure(
-        os.getenv("LLAMA_OPENAI_API_KEY", "dummy"),
-        os.getenv("LLAMA_OPENAI_ENDPOINT", "http://localhost:8000/v1/")
-    )
-
-    # Add models to Llama
-    llama_backend.add_model("llama3.2", {})
-    llama_backend.add_model("llama3.3", {})
-
-
-def get_chat_model(backend: str = "azure", model_name: str = "o4-mini"):
     """
-    Returns an OpenAIChatCompletionsModel using the selected backend and model.
-    Maintains backward compatibility with the previous design.
+    Configure backends with runtime values.
+    This is a compatibility function for backward compatibility.
     """
-    return Backends.get_chat_model(backend, model_name)
-
-
-def load_backend_config_from_dict(config_dict):
-    """
-    Load backend configuration from a dictionary, similar to the old BACKEND_CONFIGS.
-    This is a helper function for backward compatibility.
-    """
-    return Backends.from_dict(config_dict)
+    # No need to do anything as backends are already configured in BACKEND_CONFIGS
+    logger.info("Backends configured from BACKEND_CONFIGS and environment variables")

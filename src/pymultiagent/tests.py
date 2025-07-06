@@ -66,23 +66,23 @@ def print_agent_inner_dialog(result):
         print("No raw responses available to show inner dialog.")
 
 
-async def run_test_cases(triage_assistant):
-    """Run predefined test cases for the triage assistant.
+async def run_test_cases(triage_agent):
+    """Run predefined test cases for the triage agent.
 
     Args:
-        triage_assistant: An Assistant instance or an OpenAI Agent instance
+        triage_agent: An Agent instance or an OpenAI Agent instance
     """
     start_time = time.time()
 
     # Get the agent to use for tests
-    if hasattr(triage_assistant, 'get_agent'):
-        # If it's an Assistant, get its agent
-        agent_to_use = triage_assistant.get_agent()
+    if hasattr(triage_agent, 'get_agent'):
+        # If it's an Agent class instance, get its internal agent
+        agent_to_use = triage_agent.get_agent()
     else:
         # If it's already an OpenAI Agent
-        agent_to_use = triage_assistant
+        agent_to_use = triage_agent
 
-    # Test Case 1: Date request - should be handled by Date Assistant
+    # Test Case 1: Date request - should be handled by Date Agent
     print("--- Test Case 1: Date Request ---")
     result_date_request = await Runner.run(
         agent_to_use,
@@ -99,7 +99,7 @@ async def run_test_cases(triage_assistant):
 
     print("\n" + format_separator_line() + "\n")
 
-    # Test Case 2: Time request - should be handled by Time Assistant
+    # Test Case 2: Time request - should be handled by Time Agent
     print("--- Test Case 2: Time Request ---")
     result_time_request = await Runner.run(
         agent_to_use,
@@ -116,7 +116,7 @@ async def run_test_cases(triage_assistant):
 
     print("\n" + format_separator_line() + "\n")
 
-    # Test Case 3: Coding request - should be handled by Code Assistant
+    # Test Case 3: Coding request - should be handled by Code Agent
     print("--- Test Case 3: Coding Request ---")
     result_code_request = await Runner.run(
         agent_to_use,
@@ -133,7 +133,7 @@ async def run_test_cases(triage_assistant):
 
     print("\n" + format_separator_line() + "\n")
 
-    # Test Case 4: Writing request - should be handled by Writing Assistant
+    # Test Case 4: Writing request - should be handled by Writing Agent
     print("--- Test Case 4: Writing Request ---")
     result_writing_request = await Runner.run(
         agent_to_use,
@@ -150,7 +150,7 @@ async def run_test_cases(triage_assistant):
 
     print("\n" + format_separator_line() + "\n")
 
-    # Test Case 5: Math request - should be handled by Math Assistant
+    # Test Case 5: Math request - should be handled by Math Agent
     print("--- Test Case 5: Math Request ---")
     result_math_request = await Runner.run(
         agent_to_use,
@@ -167,7 +167,7 @@ async def run_test_cases(triage_assistant):
 
     print("\n" + format_separator_line() + "\n")
 
-    # Test Case 6: Knowledge Request - should be handled by the Knowledge Assistant
+    # Test Case 6: Knowledge Request - should be handled by the Knowledge Agent
     print("--- Test Case 6: Knowledge Request ---")
     result_general_request = await Runner.run(
         agent_to_use,

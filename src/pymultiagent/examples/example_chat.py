@@ -4,7 +4,7 @@ Example script demonstrating how to use the chat interfaces.
 """
 import asyncio
 import argparse
-from pymultiagent.assistants import Assistant
+from pymultiagent.agents import Agent
 from pymultiagent.chat import CLIChat
 
 async def main():
@@ -17,11 +17,11 @@ async def main():
     parser.add_argument("--max_turns", type=int, default=15, help="Maximum conversation turns")
     args = parser.parse_args()
 
-    # Create a simple assistant
-    assistant = Assistant(
-        name="Simple Assistant",
+    # Create a simple agent
+    agent = Agent(
+        name="Simple Agent",
         instructions=(
-            "You are a friendly and helpful assistant. "
+            "You are a friendly and helpful agent. "
             "Answer questions concisely and accurately."
         ),
         backend=args.backend,
@@ -29,9 +29,9 @@ async def main():
     )
 
     print(f"Starting chat with {args.backend} backend and {args.model} model")
-    
+
     # Create and run the CLI chat interface
-    chat = CLIChat(assistant, max_turns=args.max_turns)
+    chat = CLIChat(agent, max_turns=args.max_turns)
     await chat.run()
 
 if __name__ == "__main__":

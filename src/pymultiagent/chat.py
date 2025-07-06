@@ -33,21 +33,36 @@ def extract_message_text(item):
     return ""
 
 # Configure logging
+
+def process_chat_history(chat_history, new_response):
+    """
+    Update chat history with a new response.
+
+    Args:
+        chat_history (list): Existing chat history
+        new_response: New response to add to history
+
+    Returns:
+        list: Updated chat history
+    """
+    return chat_history + new_response.to_input_list()
+
+
 class AbstractChat(ABC):
     """
     Abstract base class for chat interfaces.
     Provides a common interface for different chat implementations.
     """
 
-    def __init__(self, assistant, max_turns=15):
+    def __init__(self, agent, max_turns=15):
         """
         Initialize the chat interface.
 
         Args:
-            assistant: The initialized assistant to use for the chat
+            agent: The initialized agent to use for the chat
             max_turns (int): Maximum turns allowed for each agent run
         """
-        self.assistant = assistant
+        self.agent = agent
         self.max_turns = max_turns
         self.chat_history = []
 
@@ -150,13 +165,13 @@ class CLIChat(AbstractChat):
     async def _process_request(self):
         """
         Process the user request and update the chat history.
-        This method handles the interaction with the assistant.
+        This method handles the interaction with the agent.
         """
         streamed_output = ""
         last_agent = None
 
         # Using the Assistant's run_streamed method
-        stream = self.assistant.run_streamed(
+        stream = self.agent.run_streamed(
             input_messages=self.chat_history,
             max_turns=self.max_turns
         )
@@ -172,7 +187,7 @@ class CLIChat(AbstractChat):
 
     async def _handle_stream_event(self, event, streamed_output, last_agent):
         """
-        Handle a streaming event from the assistant on the command line.
+        Handle a streaming event from the agent on the command line.
 
         Args:
             event: The stream event
@@ -233,18 +248,18 @@ class TelegramChat(AbstractChat):
     This class provides a chat interface for interacting with assistants via Telegram.
     """
 
-    def __init__(self, assistant, token, max_turns=15, allowed_user_ids=None, verify_ssl=True):
+    def __init__(self, agent, token, max_turns=15, allowed_user_ids=None, verify_ssl=True):
         """
         Initialize the Telegram chat interface.
 
         Args:
-            assistant: The initialized assistant to use for the chat
+            agent: The initialized agent to use for the chat
             token (str): Telegram Bot API token
             max_turns (int): Maximum turns allowed for each agent run
             allowed_user_ids (list, optional): List of user IDs allowed to interact with the bot
             verify_ssl (bool, optional): Whether to verify SSL certificates. Set to False to bypass SSL errors.
         """
-        super().__init__(assistant, max_turns)
+        super().__init__(agent, max_turns)
         self.token = token
         self.allowed_user_ids = allowed_user_ids or []
         self.user_sessions: Dict[int, List[Dict[str, Any]]] = {}  # Store chat history per user
@@ -442,9 +457,9 @@ class TelegramChat(AbstractChat):
             self.chat_history = self.user_sessions[user_id]
 
             # Process the request
-            response_text = await self._get_assistant_response()
+            response_text = await self._get_agent_response()
 
-            # Add assistant response to chat history
+            # Add agent response to chat history
             self.user_sessions[user_id].append({"role": "assistant", "content": response_text})
 
             # Process code blocks for proper Markdown formatting in Telegram
@@ -542,17 +557,17 @@ class TelegramChat(AbstractChat):
 
         return text
 
-    async def _get_assistant_response(self):
+    async def _get_agent_response(self):
         """
-        Get a response from the assistant.
+        Get a response from the agent.
 
         Returns:
-            str: The assistant's response text
+            str: The agent's response text
         """
         response_text = ""
 
-        # Run the assistant with the current chat history
-        stream = self.assistant.run_streamed(
+        # Run the agent with the current chat history
+        stream = self.agent.run_streamed(
             input_messages=self.chat_history,
             max_turns=self.max_turns
         )
